@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TrueShop</title>
     <style>
+        /* ===== БАЗОВЫЕ СТИЛИ ===== */
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b0b0e;color:#e0e0e0;min-height:100vh;display:flex;justify-content:center;padding:20px;background-image:radial-gradient(circle at 20% 50%,#1a1a2e 0%,#0b0b0e 80%)}
         .container{max-width:1300px;width:100%;background:rgba(20,20,30,.85);backdrop-filter:blur(12px);border-radius:32px;padding:24px 28px;box-shadow:0 25px 60px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.04);display:flex;flex-direction:column;min-height:90vh}
@@ -30,7 +31,7 @@
         @keyframes fadeIn{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
         .footer{margin-top:auto;padding:20px 0 10px;border-top:1px solid rgba(255,255,255,.06);text-align:center;color:#888;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:10px}
         .footer img{max-width:150px;border-radius:12px;border:1px solid #2a2a3a}
-        /* Остальные стили (сжато) */
+        /* ===== ОСТАЛЬНЫЕ СТИЛИ (ПОЛНЫЙ НАБОР) ===== */
         .search-bar{display:flex;align-items:center;background:#1a1a24;border-radius:60px;padding:4px 4px 4px 20px;border:1px solid #2a2a3a;transition:.3s;margin-bottom:12px;flex-wrap:wrap;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.3)}
         .search-bar:focus-within{border-color:#00d4ff;box-shadow:0 0 30px rgba(0,212,255,.15),0 2px 20px rgba(0,0,0,.5);transform:scale(1.01)}
         .search-bar input{flex:1;background:transparent;border:none;color:#fff;padding:14px 8px;font-size:16px;outline:none;min-width:120px}
@@ -284,9 +285,52 @@
 
 <script>
 // ================================================================
-// УПРОЩЁННАЯ АВТОРИЗАЦИЯ (только ник, аватарка)
+// ДАННЫЕ (ПОЛНЫЙ НАБОР)
 // ================================================================
+const GENRES = ['услуги','порошки','рецепты','скрипты','оружие','вирусы'];
+const GENRE_EMOJI = { услуги:'🛠', порошки:'🧪', рецепты:'📜', скрипты:'💻', оружие:'🔫', вирусы:'🦠' };
+let searchQuery = '', selectedGenre = 'all';
+
+// --- Товары (начальные) ---
+let products = JSON.parse(localStorage.getItem('trueshop_products')) || [
+    { id: 1, name: 'Товар 1', price: 100, description: 'Описание товара 1', image: '', sellerId: 0, status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['услуги'] },
+    { id: 2, name: 'Товар 2', price: 200, description: 'Описание товара 2', image: '', sellerId: 0, status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['порошки'] },
+    { id: 3, name: 'Ноутбук', price: 50000, description: 'Мощный ноутбук', image: '', sellerId: 0, status: 'approved', reviews: [], cardNumber: '9876 5432 1098 7654', genres: ['рецепты'] },
+    { id: 4, name: 'АК-47', price: 15000, description: 'Автомат Калашникова', image: '', sellerId: 0, status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['оружие'] },
+    { id: 5, name: 'Вирус-шифровальщик', price: 500, description: 'Программа для шифрования', image: '', sellerId: 0, status: 'approved', reviews: [], cardNumber: '9876 5432 1098 7654', genres: ['вирусы'] }
+];
+
+// --- Заказы, чаты, пользователи (упрощённо) ---
+let orders = JSON.parse(localStorage.getItem('trueshop_orders')) || [];
+let chatMessages = JSON.parse(localStorage.getItem('trueshop_chat')) || [];
 let currentUser = JSON.parse(localStorage.getItem('trueshop_user')) || { username: null, avatar: '' };
+
+function saveProducts() { localStorage.setItem('trueshop_products', JSON.stringify(products)); }
+function saveOrders() { localStorage.setItem('trueshop_orders', JSON.stringify(orders)); }
+function saveChat() { localStorage.setItem('trueshop_chat', JSON.stringify(chatMessages)); }
+function saveUser() { localStorage.setItem('trueshop_user', JSON.stringify(currentUser)); }
+
+// ================================================================
+// ПОЛЬЗОВАТЕЛЬ
+// ================================================================
+function getCurrentUser() { return currentUser; }
+
+function loginUser(username) {
+    if (!username.trim()) { alert('Введите ник'); return false; }
+    currentUser.username = username.trim();
+    // Если есть сохранённая аватарка, оставляем
+    saveUser();
+    updateUserInfo();
+    showPage('catalog');
+    return true;
+}
+
+function logout() {
+    currentUser = { username: null, avatar: '' };
+    saveUser();
+    updateUserInfo();
+    showPage('login');
+}
 
 function updateUserInfo() {
     const el = document.getElementById('userInfo');
@@ -298,24 +342,37 @@ function updateUserInfo() {
     }
 }
 
-function loginUser(username) {
-    if (!username.trim()) { alert('Введите ник'); return false; }
-    currentUser.username = username.trim();
-    // Если есть сохранённая аватарка, оставляем
-    localStorage.setItem('trueshop_user', JSON.stringify(currentUser));
-    updateUserInfo();
+// ================================================================
+// КОРЗИНА
+// ================================================================
+function getCart() { return JSON.parse(localStorage.getItem('trueshop_cart')) || []; }
+function saveCart(cart) { localStorage.setItem('trueshop_cart', JSON.stringify(cart)); updateCartCount(); }
+
+function updateCartCount() {
+    const cart = getCart();
+    const count = cart.reduce((s,i) => s + i.qty, 0);
+    document.getElementById('cartCount').textContent = count;
+}
+
+function addToCart(id) {
+    const prod = products.find(p => p.id === id);
+    if (!prod || prod.status !== 'approved') { alert('Товар недоступен'); return; }
+    if (!currentUser.username) { alert('Войдите, чтобы добавить в корзину'); showPage('login'); return; }
+    const cart = getCart();
+    const existing = cart.find(i => i.id === id);
+    if (existing) existing.qty++;
+    else cart.push({ id, qty: 1 });
+    saveCart(cart);
     showPage('catalog');
-    return true;
 }
 
-function logout() {
-    currentUser = { username: null, avatar: '' };
-    localStorage.removeItem('trueshop_user');
-    updateUserInfo();
-    showPage('login');
+function removeFromCart(id) {
+    let cart = getCart().filter(i => i.id !== id);
+    saveCart(cart);
+    renderCart();
 }
 
-function getCurrentUser() { return currentUser; }
+function clearCart() { saveCart([]); renderCart(); }
 
 // ================================================================
 // НАВИГАЦИЯ
@@ -356,10 +413,10 @@ function showPage(page, param) {
 }
 
 // ================================================================
-// СТРАНИЦА ВХОДА (только ник)
+// СТРАНИЦА ВХОДА
 // ================================================================
 function renderLogin() {
-    if (getCurrentUser().username) { showPage('catalog'); return; }
+    if (currentUser.username) { showPage('catalog'); return; }
     document.getElementById('pageContent').innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;">
             <h2 style="font-size:32px;margin-bottom:20px;">Добро пожаловать в TrueShop</h2>
@@ -369,7 +426,7 @@ function renderLogin() {
                     <input type="text" id="loginUsername" required placeholder="Ваш уникальный ник" style="padding:14px;font-size:18px;">
                 </div>
                 <button type="submit" class="btn" style="width:100%;padding:14px;font-size:18px;">Войти</button>
-                <div style="margin-top:12px;color:#888;font-size:14px;">Ник сохранится в браузере. Вы сможете сменить аватарку в профиле.</div>
+                <div style="margin-top:12px;color:#888;font-size:14px;">Ник сохранится в браузере. Аватарку можно загрузить в профиле.</div>
             </form>
         </div>
     `;
@@ -381,19 +438,18 @@ function renderLogin() {
 }
 
 // ================================================================
-// ПРОФИЛЬ (смена аватарки)
+// ПРОФИЛЬ
 // ================================================================
 function renderProfile() {
-    const user = getCurrentUser();
-    if (!user.username) { showPage('login'); return; }
-    const avatarHtml = user.avatar ? `<img src="${user.avatar}" class="profile-avatar">` : `<div class="profile-avatar" style="display:flex;align-items:center;justify-content:center;background:#1a1a2a;color:#888;">Нет</div>`;
+    if (!currentUser.username) { showPage('login'); return; }
+    const avatarHtml = currentUser.avatar ? `<img src="${currentUser.avatar}" class="profile-avatar">` : `<div class="profile-avatar" style="display:flex;align-items:center;justify-content:center;background:#1a1a2a;color:#888;">Нет</div>`;
     document.getElementById('pageContent').innerHTML = `
         <h2>Мой профиль</h2>
         <div class="profile-header">
             ${avatarHtml}
             <div class="profile-info">
-                <div class="username">${user.username}</div>
-                <div>Аватар: ${user.avatar ? '✅ установлен' : '❌ не установлен'}</div>
+                <div class="username">${currentUser.username}</div>
+                <div>Аватар: ${currentUser.avatar ? '✅ установлен' : '❌ не установлен'}</div>
                 <button class="btn btn-secondary" onclick="uploadAvatar()">Загрузить аватар</button>
                 <button class="btn btn-danger" onclick="logout()" style="margin-left:10px;">Выйти</button>
             </div>
@@ -410,9 +466,8 @@ function uploadAvatar() {
         if (file) {
             const reader = new FileReader();
             reader.onload = function(ev) {
-                const user = getCurrentUser();
-                user.avatar = ev.target.result;
-                localStorage.setItem('trueshop_user', JSON.stringify(user));
+                currentUser.avatar = ev.target.result;
+                saveUser();
                 updateUserInfo();
                 renderProfile();
             };
@@ -423,42 +478,618 @@ function uploadAvatar() {
 }
 
 // ================================================================
-// ОСТАЛЬНЫЕ СТРАНИЦЫ (каталог, корзина, заказы, чаты, правила, игры, AI, добавление товаров)
+// КАТАЛОГ (ПОЛНЫЙ)
 // ================================================================
-// Для краткости я оставлю заглушки, но в полном коде они есть.
-// Здесь я приведу только самые важные функции, чтобы код работал.
-
 function renderCatalog() {
-    // упрощённо, но с товарами
-    document.getElementById('pageContent').innerHTML = `
-        <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="searchInput" placeholder="Поиск..." oninput="filterProducts()"><button class="btn-search" onclick="filterProducts()">Найти</button></div>
-        <div class="genre-chips"><div class="genre-chip all active" data-genre="all" onclick="selectGenre('all')">Все</div>${GENRES.map(g=>`<div class="genre-chip ${g}" data-genre="${g}" onclick="selectGenre('${g}')">${GENRE_EMOJI[g]} ${g.charAt(0).toUpperCase()+g.slice(1)}</div>`).join('')}</div>
+    let html = `
+        <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="searchInput" placeholder="Поиск..." oninput="filterProducts()" value="${searchQuery}"><button class="btn-search" onclick="filterProducts()">Найти</button></div>
+        <div class="genre-chips" id="genreChips"><div class="genre-chip all active" data-genre="all" onclick="selectGenre('all')">Все</div>${GENRES.map(g=>`<div class="genre-chip ${g}" data-genre="${g}" onclick="selectGenre('${g}')">${GENRE_EMOJI[g]} ${g.charAt(0).toUpperCase()+g.slice(1)}</div>`).join('')}</div>
         <div id="catalogContent"><div class="section-header"><h2 id="sectionTitle">Все товары</h2><span class="count" id="sectionCount"></span></div><div id="productGrid" class="product-grid"></div></div>
     `;
-    if (getCurrentUser().username) {
+    document.getElementById('pageContent').innerHTML = html;
+    if (currentUser.username) {
         const addBtn = document.createElement('div');
         addBtn.style.marginTop = '20px';
         addBtn.innerHTML = `<button class="btn btn-success" onclick="showPage('addProduct')">➕ Добавить товар</button>`;
         document.getElementById('pageContent').appendChild(addBtn);
     }
+    document.querySelectorAll('.genre-chip').forEach(chip => {
+        if (chip.dataset.genre === selectedGenre) chip.classList.add('active');
+        else chip.classList.remove('active');
+    });
     filterProducts();
 }
 
-// ... (остальные функции аналогичны предыдущим версиям, но с упрощённой авторизацией)
+function filterProducts() {
+    const input = document.getElementById('searchInput');
+    if (input) searchQuery = input.value.trim().toLowerCase();
+    const grid = document.getElementById('productGrid');
+    const title = document.getElementById('sectionTitle');
+    const countSpan = document.getElementById('sectionCount');
+    if (!grid) return;
+    let all = products.filter(p => p.status === 'approved');
+    let filtered = all;
+    if (searchQuery) filtered = filtered.filter(p => p.name.toLowerCase().includes(searchQuery));
+    if (selectedGenre !== 'all') filtered = filtered.filter(p => p.genres && p.genres.includes(selectedGenre));
+    if (title) title.textContent = (searchQuery || selectedGenre !== 'all') ? 'Результаты поиска' : 'Все товары';
+    if (countSpan) countSpan.textContent = `${filtered.length} товар(а/ов)`;
+    if (filtered.length === 0) { grid.innerHTML = `<div class="no-results">${(searchQuery || selectedGenre !== 'all') ? '🔍 Ничего не найдено' : 'Товаров пока нет'}</div>`; return; }
+    let html = '';
+    filtered.forEach((p, index) => {
+        const imgHtml = p.image ? `<img src="${p.image}" alt="${p.name}">` : '<div style="height:150px;background:#0a0a12;display:flex;align-items:center;justify-content:center;color:#555;border-radius:14px;">Нет фото</div>';
+        const genresHtml = p.genres && p.genres.length ? `<div class="genres">${p.genres.map(g=>`<span class="genre-tag ${g}">${GENRE_EMOJI[g]||''} ${g}</span>`).join('')}</div>` : '';
+        const isOwn = currentUser.username && currentUser.username === p.sellerId; // упрощённо
+        const buttonHtml = isOwn ? `<span class="badge-own">Это ваш товар</span>` : `<button class="btn" onclick="event.stopPropagation(); addToCart(${p.id})">В корзину</button>`;
+        html += `<div class="product-card" onclick="showPage('product', ${p.id})" style="cursor:pointer; animation: fadeIn 0.4s ease ${index * 0.05}s both;">
+            ${imgHtml}<h3>${p.name}</h3><div class="price">${p.price} руб.</div><div class="meta">⭐ ${p.reviews ? p.reviews.length : 0} отзывов</div>${genresHtml}${buttonHtml}
+        </div>`;
+    });
+    grid.innerHTML = html;
+}
+
+function selectGenre(genre) {
+    selectedGenre = genre;
+    document.querySelectorAll('.genre-chip').forEach(chip => {
+        if (chip.dataset.genre === genre) chip.classList.add('active');
+        else chip.classList.remove('active');
+    });
+    filterProducts();
+}
 
 // ================================================================
-// ИГРА "ПОСТРОЙ ДЕРЕВНЮ" (расширенная)
+// КОРЗИНА
 // ================================================================
+function renderCart() {
+    const cart = getCart();
+    if (cart.length === 0) {
+        document.getElementById('pageContent').innerHTML = '<h2>Корзина</h2><p>Корзина пуста.</p>';
+        return;
+    }
+    let html = '<h2>Корзина</h2><table class="cart-table"><tr><th>Товар</th><th>Цена</th><th>Кол-во</th><th>Сумма</th><th></th></tr>';
+    let total = 0;
+    cart.forEach(item => {
+        const prod = products.find(p => p.id === item.id);
+        if (!prod) return;
+        const sum = prod.price * item.qty;
+        total += sum;
+        html += `<tr><td>${prod.name}</td><td>${prod.price}</td><td>${item.qty}</td><td>${sum}</td><td><button class="btn btn-danger" onclick="removeFromCart(${item.id})">Удалить</button></td></tr>`;
+    });
+    html += `</table><div class="total">Итого: ${total} руб.</div>
+        <button class="btn btn-success" onclick="showPage('orderForm')">Оформить заказ</button>
+        <button class="btn btn-danger" onclick="clearCart()">Очистить</button>`;
+    document.getElementById('pageContent').innerHTML = html;
+}
+
+// ================================================================
+// ОФОРМЛЕНИЕ ЗАКАЗА
+// ================================================================
+function renderOrderForm() {
+    const cart = getCart();
+    if (cart.length === 0) { alert('Корзина пуста'); showPage('cart'); return; }
+    if (!currentUser.username) { alert('Войдите'); showPage('login'); return; }
+    document.getElementById('pageContent').innerHTML = `
+        <h2>Оформление заказа</h2>
+        <form id="orderForm">
+            <div class="form-group"><label>Имя</label><input type="text" id="orderName" value="${currentUser.username}" required></div>
+            <div class="form-group"><label>Телефон</label><input type="text" id="orderPhone"></div>
+            <button type="submit" class="btn btn-success">Подтвердить</button>
+            <button type="button" class="btn btn-secondary" onclick="showPage('cart')">Назад</button>
+        </form>
+    `;
+    document.getElementById('orderForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const name = document.getElementById('orderName').value.trim() || 'Покупатель';
+        const phone = document.getElementById('orderPhone').value.trim();
+        const cartItems = getCart();
+        const orderItems = cartItems.map(item => {
+            const prod = products.find(p => p.id === item.id);
+            return {
+                productId: prod.id,
+                productName: prod.name,
+                price: prod.price,
+                qty: item.qty,
+                total: prod.price * item.qty,
+                buyerName: name,
+                buyerPhone: phone,
+                sellerId: 0 // упрощённо
+            };
+        });
+        // Сохраняем заказ
+        const order = {
+            id: orders.length ? Math.max(...orders.map(o => o.id)) + 1 : 1,
+            items: orderItems,
+            buyerName: name,
+            buyerId: currentUser.username,
+            status: 'pending',
+            created: new Date().toLocaleString(),
+            messages: [{ senderId: 'system', text: 'Заказ создан.', timestamp: new Date().toLocaleString() }]
+        };
+        orders.push(order);
+        saveOrders();
+        saveCart([]);
+        updateCartCount();
+        alert('Заказ оформлен!');
+        showPage('myOrders');
+    });
+}
+
+// ================================================================
+// МОИ ЗАКАЗЫ
+// ================================================================
+function renderMyOrders() {
+    if (!currentUser.username) { showPage('login'); return; }
+    const myOrders = orders.filter(o => o.buyerId === currentUser.username);
+    if (myOrders.length === 0) {
+        document.getElementById('pageContent').innerHTML = '<h2>Мои заказы</h2><p>Нет заказов.</p>';
+        return;
+    }
+    let html = '<h2>Мои заказы</h2>';
+    myOrders.forEach(o => {
+        html += `<div class="order-card">
+            <b>Заказ #${o.id}</b> от ${o.created}<br>
+            Товары: ${o.items.map(i => `${i.productName} x${i.qty}`).join(', ')}<br>
+            Сумма: ${o.items.reduce((s,i) => s + i.total, 0)} руб.<br>
+            Статус: <span class="status-${o.status}">${o.status === 'pending' ? 'Ожидает' : o.status}</span><br>
+            <button class="btn btn-secondary order-chat-link" onclick="showPage('chat',${o.id})">Чат</button>
+        </div>`;
+    });
+    document.getElementById('pageContent').innerHTML = html;
+}
+
+// ================================================================
+// ЧАТЫ ПО ЗАКАЗАМ
+// ================================================================
+function renderChatsList() {
+    if (!currentUser.username) { showPage('login'); return; }
+    const myOrders = orders.filter(o => o.buyerId === currentUser.username);
+    if (myOrders.length === 0) {
+        document.getElementById('pageContent').innerHTML = '<h2>Чаты</h2><p>Нет заказов для чата.</p>';
+        return;
+    }
+    let html = '<h2>Чаты</h2>';
+    myOrders.forEach(o => {
+        const lastMsg = o.messages && o.messages.length > 0 ? o.messages[o.messages.length-1].text : 'Нет сообщений';
+        html += `<div class="order-card" style="cursor:pointer;" onclick="showPage('chat',${o.id})">
+            <b>Заказ #${o.id}</b> — ${o.items.map(i => i.productName).join(', ')}<br>
+            <span style="color:#888;">Последнее: ${lastMsg}</span>
+        </div>`;
+    });
+    document.getElementById('pageContent').innerHTML = html;
+}
+
+function renderChat(orderId) {
+    if (!currentUser.username) { showPage('login'); return; }
+    const order = orders.find(o => o.id === orderId);
+    if (!order) { alert('Заказ не найден'); showPage('chats'); return; }
+    let html = `<h2>Чат по заказу #${order.id}</h2>
+        <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">`;
+    if (order.messages && order.messages.length > 0) {
+        order.messages.forEach(msg => {
+            const isSystem = msg.senderId === 'system';
+            const isSelf = msg.senderId === currentUser.username;
+            const cls = isSystem ? 'system' : (isSelf ? 'self' : '');
+            const senderName = isSystem ? 'Система' : (isSelf ? 'Вы' : msg.senderId);
+            html += `<div class="chat-message ${cls}">
+                <span class="sender">${senderName}</span>
+                <span class="time">${msg.timestamp || ''}</span>
+                <div>${msg.text}</div>
+            </div>`;
+        });
+    } else {
+        html += `<div class="chat-message system">Сообщений пока нет.</div>`;
+    }
+    html += `</div>
+            <div class="chat-input">
+                <input type="text" id="chatInput" placeholder="Введите сообщение...">
+                <button class="btn" onclick="sendOrderMessage(${orderId})">Отправить</button>
+            </div>
+            <div style="margin-top:12px;">
+                <button class="btn btn-secondary" onclick="showPage('chats')">← Назад</button>
+            </div>
+        </div>`;
+    document.getElementById('pageContent').innerHTML = html;
+    const msgs = document.getElementById('chatMessages');
+    if (msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
+function sendOrderMessage(orderId) {
+    const input = document.getElementById('chatInput');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    if (!order.messages) order.messages = [];
+    order.messages.push({ senderId: currentUser.username, text, timestamp: new Date().toLocaleString() });
+    saveOrders();
+    input.value = '';
+    renderChat(orderId);
+}
+
+// ================================================================
+// ОБЩИЙ ЧАТ
+// ================================================================
+function renderGlobalChat() {
+    let html = `
+        <div class="global-chat-container">
+            <h2>🌐 Общий чат</h2>
+            <div class="global-chat-messages" id="globalChatMessages">
+                ${chatMessages.map(msg => `
+                    <div class="global-chat-msg ${msg.system ? 'system-msg' : ''}">
+                        <span class="sender">${msg.username}</span>
+                        <span class="time">${msg.timestamp || ''}</span>
+                        <div>${msg.text}</div>
+                    </div>
+                `).join('')}
+                ${chatMessages.length === 0 ? '<div class="global-chat-msg system-msg">Пока нет сообщений.</div>' : ''}
+            </div>
+            ${currentUser.username ? `
+            <div class="global-chat-input">
+                <input type="text" id="globalChatInput" placeholder="Введите сообщение..." onkeydown="if(event.key==='Enter') sendGlobalMessage()">
+                <button class="btn" onclick="sendGlobalMessage()">Отправить</button>
+            </div>
+            ` : `<p style="color:#888;">Войдите, чтобы отправлять сообщения.</p>`}
+        </div>
+    `;
+    document.getElementById('pageContent').innerHTML = html;
+    const chatDiv = document.getElementById('globalChatMessages');
+    if (chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight;
+}
+
+function sendGlobalMessage() {
+    if (!currentUser.username) { alert('Войдите'); showPage('login'); return; }
+    const input = document.getElementById('globalChatInput');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    chatMessages.push({ username: currentUser.username, text, timestamp: new Date().toLocaleString(), system: false });
+    saveChat();
+    input.value = '';
+    renderGlobalChat();
+}
+
+// ================================================================
+// ПРАВИЛА
+// ================================================================
+function renderRules() {
+    document.getElementById('pageContent').innerHTML = `
+        <div class="rules-container">
+            <h1>📋 Правила</h1>
+            <div class="rule-item"><strong>1.</strong> Переводите деньги напрямую продавцу.</div>
+            <div class="rule-item"><strong>2.</strong> Запрещено мошенничество.</div>
+            <img src="https://img.freepik.com/free-vector/crazy-emoji-comic-character-icon_24877-83241.jpg" alt="Правила" loading="lazy">
+        </div>
+    `;
+}
+
+// ================================================================
+// ИГРЫ (ПОЛНЫЙ НАБОР)
+// ================================================================
+// ---- Игровой центр ----
+function renderGameHub() {
+    document.getElementById('pageContent').innerHTML = `
+        <div class="game-hub"><h2>🎮 Игровой центр</h2>
+        <div class="game-grid">
+            <div class="game-card" onclick="showPage('game','tictactoe')"><span class="icon">❌⭕</span><h3>Крестики-нолики</h3></div>
+            <div class="game-card" onclick="showPage('game','minesweeper')"><span class="icon">💣</span><h3>Сапёр</h3></div>
+            <div class="game-card" onclick="showPage('game','village')"><span class="icon">🏡</span><h3>Построй деревню</h3></div>
+            <div class="game-card" onclick="showPage('game','paint')"><span class="icon">🎨</span><h3>Paint</h3></div>
+            <div class="game-card" onclick="showPage('game','runner')"><span class="icon">🏃</span><h3>Закладчик</h3></div>
+        </div></div>
+    `;
+}
+
+// ---- Крестики-нолики (полная реализация) ----
+let ticState = { board: ['','','','','','','','',''], currentPlayer:'X', gameOver:false, mode:'friend', score:{X:0,O:0,draw:0}, botTimeout:null };
+
+function renderTicTacToe() {
+    if (ticState.gameOver) {
+        ticState.board = ['','','','','','','','',''];
+        ticState.currentPlayer = 'X';
+        ticState.gameOver = false;
+    }
+    const html = `
+        <div class="game-container">
+            <h2>❌⭕ Крестики-нолики</h2>
+            <div class="game-mode-selector">
+                <button class="btn btn-secondary ${ticState.mode === 'friend' ? 'active' : ''}" onclick="setTicMode('friend')">👥 С другом</button>
+                <button class="btn btn-secondary ${ticState.mode === 'bot' ? 'active' : ''}" onclick="setTicMode('bot')">🤖 С ботом</button>
+            </div>
+            <div class="game-status" id="ticStatus"></div>
+            <div class="game-board" id="ticBoard"></div>
+            <div class="game-score">
+                <span class="x-score">X: <span id="ticScoreX">${ticState.score.X}</span></span>
+                <span class="draw-score">Ничьи: <span id="ticScoreDraw">${ticState.score.draw}</span></span>
+                <span class="o-score">O: <span id="ticScoreO">${ticState.score.O}</span></span>
+            </div>
+            <div class="game-actions">
+                <button class="btn btn-secondary" onclick="resetTicGame()">🔄 Новая игра</button>
+                <button class="btn btn-danger" onclick="resetTicScore()">🗑️ Сбросить счёт</button>
+                <button class="btn btn-secondary" onclick="showPage('game')">← Назад</button>
+            </div>
+        </div>
+    `;
+    document.getElementById('pageContent').innerHTML = html;
+    renderTicBoard();
+    if (ticState.mode === 'bot' && ticState.currentPlayer === 'O' && !ticState.gameOver) {
+        if (ticState.botTimeout) clearTimeout(ticState.botTimeout);
+        ticState.botTimeout = setTimeout(() => ticBotMove(), 300);
+    }
+}
+
+function setTicMode(mode) { ticState.mode = mode; resetTicGame(); }
+
+function renderTicBoard() {
+    const boardEl = document.getElementById('ticBoard');
+    if (!boardEl) return;
+    boardEl.innerHTML = '';
+    ticState.board.forEach((cell, index) => {
+        const cellDiv = document.createElement('div');
+        cellDiv.className = `game-cell ${cell ? 'taken ' + cell.toLowerCase() : ''}`;
+        cellDiv.textContent = cell;
+        cellDiv.dataset.index = index;
+        if (!cell && !ticState.gameOver) {
+            cellDiv.addEventListener('click', () => ticHandleClick(index));
+        }
+        boardEl.appendChild(cellDiv);
+    });
+    const statusEl = document.getElementById('ticStatus');
+    if (statusEl) {
+        if (ticState.gameOver) {
+            const winner = ticCheckWinner();
+            if (winner === 'X') statusEl.innerHTML = '🏆 Победил <span style="color:#00d4ff;">X</span>!';
+            else if (winner === 'O') statusEl.innerHTML = '🏆 Победил <span style="color:#f5576c;">O</span>!';
+            else if (ticState.board.every(c => c !== '')) statusEl.innerHTML = '🤝 Ничья!';
+            else statusEl.innerHTML = 'Игра завершена.';
+        } else {
+            statusEl.innerHTML = `Ход: <span style="color:#00d4ff;">${ticState.currentPlayer}</span>`;
+        }
+    }
+    document.getElementById('ticScoreX').textContent = ticState.score.X;
+    document.getElementById('ticScoreO').textContent = ticState.score.O;
+    document.getElementById('ticScoreDraw').textContent = ticState.score.draw;
+}
+
+function ticHandleClick(index) {
+    if (ticState.gameOver) return;
+    if (ticState.mode === 'bot' && ticState.currentPlayer === 'O') return;
+    if (ticState.board[index] !== '') return;
+    ticMakeMove(index);
+}
+
+function ticMakeMove(index) {
+    ticState.board[index] = ticState.currentPlayer;
+    renderTicBoard();
+    const winner = ticCheckWinner();
+    if (winner) {
+        ticState.gameOver = true;
+        ticState.score[winner]++;
+        renderTicBoard();
+        return;
+    } else if (ticState.board.every(c => c !== '')) {
+        ticState.gameOver = true;
+        ticState.score.draw++;
+        renderTicBoard();
+        return;
+    }
+    ticState.currentPlayer = (ticState.currentPlayer === 'X' ? 'O' : 'X');
+    renderTicBoard();
+    if (ticState.mode === 'bot' && ticState.currentPlayer === 'O' && !ticState.gameOver) {
+        if (ticState.botTimeout) clearTimeout(ticState.botTimeout);
+        ticState.botTimeout = setTimeout(() => ticBotMove(), 300);
+    }
+}
+
+function ticBotMove() {
+    if (ticState.gameOver) return;
+    if (ticState.currentPlayer !== 'O') return;
+    const empty = ticState.board.reduce((acc, cell, idx) => {
+        if (cell === '') acc.push(idx);
+        return acc;
+    }, []);
+    if (empty.length === 0) return;
+    const randomIndex = empty[Math.floor(Math.random() * empty.length)];
+    ticMakeMove(randomIndex);
+    ticState.botTimeout = null;
+}
+
+function ticCheckWinner() {
+    const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    for (let line of lines) {
+        const [a,b,c] = line;
+        if (ticState.board[a] && ticState.board[a] === ticState.board[b] && ticState.board[a] === ticState.board[c]) {
+            return ticState.board[a];
+        }
+    }
+    return null;
+}
+
+function resetTicGame() {
+    ticState.board = ['','','','','','','','',''];
+    ticState.currentPlayer = 'X';
+    ticState.gameOver = false;
+    if (ticState.botTimeout) { clearTimeout(ticState.botTimeout); ticState.botTimeout = null; }
+    renderTicBoard();
+    if (ticState.mode === 'bot' && ticState.currentPlayer === 'O' && !ticState.gameOver) {
+        if (ticState.botTimeout) clearTimeout(ticState.botTimeout);
+        ticState.botTimeout = setTimeout(() => ticBotMove(), 300);
+    }
+}
+
+function resetTicScore() {
+    ticState.score = { X: 0, O: 0, draw: 0 };
+    resetTicGame();
+}
+
+// ---- Сапёр (полная реализация) ----
+let mineState = { rows:9, cols:9, mines:10, board:[], revealed:[], flagged:[], gameOver:false, firstClick:true, timer:0, timerInterval:null, flagMode:false };
+
+function initMinesweeper() {
+    const rows = mineState.rows, cols = mineState.cols, mines = mineState.mines;
+    mineState.board = Array.from({ length: rows }, () => Array(cols).fill(0));
+    mineState.revealed = Array.from({ length: rows }, () => Array(cols).fill(false));
+    mineState.flagged = Array.from({ length: rows }, () => Array(cols).fill(false));
+    mineState.gameOver = false;
+    mineState.firstClick = true;
+    mineState.timer = 0;
+    if (mineState.timerInterval) clearInterval(mineState.timerInterval);
+    mineState.timerInterval = null;
+    renderMinesweeper();
+}
+
+function placeMines(excludeRow, excludeCol) {
+    const rows = mineState.rows, cols = mineState.cols, mines = mineState.mines;
+    let placed = 0;
+    while (placed < mines) {
+        const r = Math.floor(Math.random() * rows);
+        const c = Math.floor(Math.random() * cols);
+        if ((r === excludeRow && c === excludeCol) || mineState.board[r][c] === -1) continue;
+        mineState.board[r][c] = -1;
+        placed++;
+    }
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (mineState.board[r][c] === -1) continue;
+            let count = 0;
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    const nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && mineState.board[nr][nc] === -1) count++;
+                }
+            }
+            mineState.board[r][c] = count;
+        }
+    }
+}
+
+function renderMinesweeper() {
+    const rows = mineState.rows, cols = mineState.cols;
+    let boardHtml = `
+        <div class="minesweeper-container">
+            <div class="minesweeper-header">
+                <span>💣 ${mineState.mines}</span>
+                <span>⏱️ ${mineState.timer}</span>
+                <div>
+                    <button class="btn btn-secondary" onclick="toggleMineFlagMode()" style="padding:4px 12px;font-size:13px;">
+                        ${mineState.flagMode ? '🚩 Режим флага' : '🟦 Режим открытия'}
+                    </button>
+                </div>
+            </div>
+            <div class="minesweeper-board" style="grid-template-columns: repeat(${cols}, 1fr); max-width: ${Math.min(400, cols*40)}px;">
+    `;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = mineState.board[r][c];
+            const revealed = mineState.revealed[r][c];
+            const flagged = mineState.flagged[r][c];
+            let content = '';
+            let classes = 'minesweeper-cell';
+            if (revealed) {
+                classes += ' revealed';
+                if (cell === -1) content = '💣';
+                else if (cell > 0) content = cell;
+                else content = '';
+                if (mineState.gameOver && cell === -1 && !mineState.flagged[r][c]) classes += ' mine-exploded';
+            } else if (flagged) {
+                classes += ' flagged';
+                content = '🚩';
+            }
+            boardHtml += `<div class="${classes}" data-r="${r}" data-c="${c}" data-value="${cell}" onclick="mineCellClick(${r},${c})" oncontextmenu="mineRightClick(event,${r},${c})">${content}</div>`;
+        }
+    }
+    boardHtml += `
+            </div>
+            <div style="margin-top:15px;">
+                <button class="btn btn-secondary" onclick="initMinesweeper()">🔄 Новая игра</button>
+                <button class="btn btn-secondary" onclick="showPage('game')">← Назад</button>
+            </div>
+            ${mineState.gameOver ? `<div style="margin-top:10px;font-size:20px;font-weight:600;color:#f44336;">${mineState.gameOver === 'win' ? '🎉 Победа!' : '💥 Поражение!'}</div>` : ''}
+        </div>
+    `;
+    document.getElementById('pageContent').innerHTML = boardHtml;
+}
+
+function toggleMineFlagMode() {
+    mineState.flagMode = !mineState.flagMode;
+    renderMinesweeper();
+}
+
+function mineCellClick(row, col) {
+    if (mineState.gameOver) return;
+    if (mineState.flagged[row][col]) return;
+    if (mineState.revealed[row][col]) return;
+    if (mineState.firstClick) {
+        placeMines(row, col);
+        mineState.firstClick = false;
+        mineState.timerInterval = setInterval(() => {
+            mineState.timer++;
+            document.querySelector('.minesweeper-header span:nth-child(2)').textContent = '⏱️ ' + mineState.timer;
+        }, 1000);
+    }
+    if (mineState.flagMode) {
+        mineState.flagged[row][col] = !mineState.flagged[row][col];
+        renderMinesweeper();
+        return;
+    }
+    revealCell(row, col);
+    renderMinesweeper();
+    checkWin();
+}
+
+function mineRightClick(e, row, col) {
+    e.preventDefault();
+    if (mineState.gameOver) return;
+    if (mineState.revealed[row][col]) return;
+    mineState.flagged[row][col] = !mineState.flagged[row][col];
+    renderMinesweeper();
+}
+
+function revealCell(row, col) {
+    if (row < 0 || row >= mineState.rows || col < 0 || col >= mineState.cols) return;
+    if (mineState.revealed[row][col]) return;
+    if (mineState.flagged[row][col]) return;
+    if (mineState.board[row][col] === -1) {
+        mineState.gameOver = 'lose';
+        if (mineState.timerInterval) clearInterval(mineState.timerInterval);
+        mineState.timerInterval = null;
+        return;
+    }
+    mineState.revealed[row][col] = true;
+    if (mineState.board[row][col] === 0) {
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                if (dr === 0 && dc === 0) continue;
+                revealCell(row + dr, col + dc);
+            }
+        }
+    }
+}
+
+function checkWin() {
+    let allRevealed = true;
+    for (let r = 0; r < mineState.rows; r++) {
+        for (let c = 0; c < mineState.cols; c++) {
+            if (mineState.board[r][c] !== -1 && !mineState.revealed[r][c]) {
+                allRevealed = false;
+                break;
+            }
+        }
+        if (!allRevealed) break;
+    }
+    if (allRevealed) {
+        mineState.gameOver = 'win';
+        if (mineState.timerInterval) clearInterval(mineState.timerInterval);
+        mineState.timerInterval = null;
+        renderMinesweeper();
+    }
+}
+
+// ---- Стратегия (расширенная) ----
 const RESOURCE_NAMES = {
-    wood: 'Древесина',
-    stone: 'Камень',
-    food: 'Еда',
-    gold: 'Золото',
-    iron: 'Железо',
-    crystal: 'Кристаллы',
-    mana: 'Мана',
-    energy: 'Энергия',   // новый
-    magic: 'Магия'       // новый
+    wood: 'Древесина', stone: 'Камень', food: 'Еда', gold: 'Золото',
+    iron: 'Железо', crystal: 'Кристаллы', mana: 'Мана',
+    energy: 'Энергия', magic: 'Магия'
 };
 const RESOURCE_EMOJI = {
     wood: '🌲', stone: '🪨', food: '🌾', gold: '🪙',
@@ -466,7 +1097,6 @@ const RESOURCE_EMOJI = {
     energy: '⚡', magic: '🔮'
 };
 
-// Базовые постройки + 8 новых
 const BUILDING_TEMPLATES = {
     house: { name: 'Дом', cost: { wood: 5, stone: 3 }, effect: { population: 2 }, emoji: '🏠' },
     farm: { name: 'Ферма', cost: { wood: 8, stone: 3 }, effect: { food: 2 }, emoji: '🌾' },
@@ -488,7 +1118,6 @@ const BUILDING_TEMPLATES = {
     port: { name: 'Порт', cost: { wood: 35, stone: 25, gold: 15 }, effect: { trade: 1 }, emoji: '⚓' },
     lighthouse: { name: 'Маяк', cost: { stone: 30, crystal: 10, mana: 5 }, effect: { navigation: 1 }, emoji: '🔦' },
     alchemy: { name: 'Алхимическая лаборатория', cost: { wood: 40, stone: 30, gold: 20, crystal: 15, mana: 10 }, effect: { mana: 4, crystal: 2 }, emoji: '⚗️' },
-    // 8 новых построек
     powerplant: { name: 'Электростанция', cost: { wood: 25, stone: 20, energy: 10 }, effect: { energy: 3 }, emoji: '🏭' },
     mage_tower: { name: 'Башня магов', cost: { stone: 30, crystal: 10, mana: 15 }, effect: { magic: 3, mana: 2 }, emoji: '🧙' },
     farm_advanced: { name: 'Продвинутая ферма', cost: { wood: 18, stone: 12, food: 10 }, effect: { food: 5 }, emoji: '🌽' },
@@ -499,13 +1128,8 @@ const BUILDING_TEMPLATES = {
     trading_post: { name: 'Торговый пост', cost: { wood: 20, stone: 15, gold: 8 }, effect: { gold: 5, trade: 1 }, emoji: '🏪' }
 };
 
-// Состояние игры
 let villageState = JSON.parse(localStorage.getItem('villageState')) || {
-    resources: {
-        wood: 100, stone: 100, food: 100, gold: 100,
-        iron: 100, crystal: 100, mana: 100,
-        energy: 100, magic: 100
-    },
+    resources: { wood: 100, stone: 100, food: 100, gold: 100, iron: 100, crystal: 100, mana: 100, energy: 100, magic: 100 },
     buildings: Object.keys(BUILDING_TEMPLATES).reduce((a, k) => {
         a[k] = { count: k === 'house' ? 1 : 0 };
         return a;
@@ -519,7 +1143,6 @@ let villageState = JSON.parse(localStorage.getItem('villageState')) || {
 
 function saveVillage() { localStorage.setItem('villageState', JSON.stringify(villageState)); }
 function ensureVillageState() {
-    // Инициализация новых ресурсов и построек, если их нет
     for (let res of ['energy', 'magic']) {
         if (villageState.resources[res] === undefined) villageState.resources[res] = 100;
     }
@@ -571,12 +1194,10 @@ function renderVillageBuilder() {
         </div>
     `;
     document.getElementById('pageContent').innerHTML = html;
-    // Запуск генерации ресурсов
     if (!window.villageInterval) {
         window.villageInterval = setInterval(() => {
             const b = villageState.buildings;
             const r = villageState.resources;
-            // Генерация от зданий (упрощённо)
             r.wood += (b.lumbermill ? b.lumbermill.count * 2 : 0);
             r.stone += (b.quarry ? b.quarry.count * 2 : 0) + (b.mine ? b.mine.count * 1 : 0);
             r.food += (b.farm ? b.farm.count * 2 : 0) + (b.temple ? b.temple.count * 1 : 0) + (b.farm_advanced ? b.farm_advanced.count * 5 : 0);
@@ -634,11 +1255,7 @@ function buildBuilding(type) {
 function resetVillage() {
     if (!confirm('Сбросить прогресс деревни?')) return;
     villageState = {
-        resources: {
-            wood: 100, stone: 100, food: 100, gold: 100,
-            iron: 100, crystal: 100, mana: 100,
-            energy: 100, magic: 100
-        },
+        resources: { wood: 100, stone: 100, food: 100, gold: 100, iron: 100, crystal: 100, mana: 100, energy: 100, magic: 100 },
         buildings: Object.keys(BUILDING_TEMPLATES).reduce((a, k) => {
             a[k] = { count: k === 'house' ? 1 : 0 };
             return a;
@@ -657,53 +1274,448 @@ function resetVillage() {
     renderVillageBuilder();
 }
 
+// ---- Paint (полная реализация) ----
+let paintCanvas, paintCtx, painting = false, paintColor = '#000000', paintBrushSize = 5;
+
+function renderPaint() {
+    const html = `
+        <div class="paint-container">
+            <h2>🎨 Paint</h2>
+            <div class="paint-canvas-wrapper">
+                <canvas id="paintCanvas" width="400" height="400"></canvas>
+            </div>
+            <div class="paint-tools">
+                <button class="active" data-color="#000000" onclick="setPaintColor('#000000', this)">⚫ Чёрный</button>
+                <button data-color="#ff0000" onclick="setPaintColor('#ff0000', this)">🔴 Красный</button>
+                <button data-color="#0000ff" onclick="setPaintColor('#0000ff', this)">🔵 Синий</button>
+                <button data-color="#00ff00" onclick="setPaintColor('#00ff00', this)">🟢 Зелёный</button>
+                <button data-color="#ffff00" onclick="setPaintColor('#ffff00', this)">🟡 Жёлтый</button>
+                <button data-color="#ff00ff" onclick="setPaintColor('#ff00ff', this)">🟣 Фиолетовый</button>
+                <button onclick="clearPaint()">🗑️ Очистить</button>
+                <button onclick="guessPaint()">🤖 Угадать!</button>
+            </div>
+            <div class="paint-guess"><div id="paintResult">Нажмите "Угадать", чтобы AI попытался угадать</div></div>
+            <div style="margin-top:15px;"><button class="btn btn-secondary" onclick="showPage('game')">← Назад</button></div>
+        </div>
+    `;
+    document.getElementById('pageContent').innerHTML = html;
+    paintCanvas = document.getElementById('paintCanvas');
+    paintCtx = paintCanvas.getContext('2d');
+    paintCtx.fillStyle = 'white';
+    paintCtx.fillRect(0, 0, 400, 400);
+    paintCanvas.addEventListener('mousedown', startPaint);
+    paintCanvas.addEventListener('mousemove', drawPaint);
+    paintCanvas.addEventListener('mouseup', endPaint);
+    paintCanvas.addEventListener('mouseleave', endPaint);
+    paintCanvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const t = e.touches[0];
+        const rect = paintCanvas.getBoundingClientRect();
+        const x = (t.clientX - rect.left) * (400 / rect.width);
+        const y = (t.clientY - rect.top) * (400 / rect.height);
+        startPaint({ clientX: x, clientY: y });
+    });
+    paintCanvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        const t = e.touches[0];
+        const rect = paintCanvas.getBoundingClientRect();
+        const x = (t.clientX - rect.left) * (400 / rect.width);
+        const y = (t.clientY - rect.top) * (400 / rect.height);
+        drawPaint({ clientX: x, clientY: y });
+    });
+    paintCanvas.addEventListener('touchend', endPaint);
+    document.querySelector('.paint-tools .active')?.classList.add('active');
+}
+
+function setPaintColor(color, btn) {
+    paintColor = color;
+    document.querySelectorAll('.paint-tools button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+}
+
+function clearPaint() {
+    paintCtx.fillStyle = 'white';
+    paintCtx.fillRect(0, 0, 400, 400);
+    document.getElementById('paintResult').innerHTML = 'Холст очищен';
+}
+
+function startPaint(e) {
+    painting = true;
+    const rect = paintCanvas.getBoundingClientRect();
+    const x = e.clientX ? (e.clientX - rect.left) * (400 / rect.width) : e.clientX;
+    const y = e.clientY ? (e.clientY - rect.top) * (400 / rect.height) : e.clientY;
+    paintCtx.beginPath();
+    paintCtx.arc(x, y, paintBrushSize / 2, 0, Math.PI * 2);
+    paintCtx.fillStyle = paintColor;
+    paintCtx.fill();
+}
+
+function drawPaint(e) {
+    if (!painting) return;
+    const rect = paintCanvas.getBoundingClientRect();
+    const x = e.clientX ? (e.clientX - rect.left) * (400 / rect.width) : e.clientX;
+    const y = e.clientY ? (e.clientY - rect.top) * (400 / rect.height) : e.clientY;
+    paintCtx.fillStyle = paintColor;
+    paintCtx.beginPath();
+    paintCtx.arc(x, y, paintBrushSize / 2, 0, Math.PI * 2);
+    paintCtx.fill();
+}
+
+function endPaint() { painting = false; }
+
+async function guessPaint() {
+    const resultDiv = document.getElementById('paintResult');
+    resultDiv.innerHTML = '⏳ AI думает...';
+    const imageData = paintCanvas.toDataURL('image/png');
+    try {
+        const response = await fetch('https://api-inference.huggingface.co/models/google/vit-base-patch16-224', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inputs: imageData.split(',')[1] })
+        });
+        if (!response.ok) throw new Error('API ошибка: ' + response.status);
+        const data = await response.json();
+        if (data && data[0] && data[0].label) {
+            resultDiv.innerHTML = `🎨 AI думает, что это: <span class="result">${data[0].label}</span> (вероятность: ${(data[0].score * 100).toFixed(1)}%)`;
+        } else {
+            resultDiv.innerHTML = '😅 Не удалось распознать. Попробуйте нарисовать что-то более чёткое.';
+        }
+    } catch (e) {
+        console.error(e);
+        const words = ['кот', 'собака', 'дом', 'дерево', 'цветок', 'машина', 'солнце', 'облако', 'рыба', 'птица', 'человек', 'сердце', 'звезда', 'луна'];
+        const randomWord = words[Math.floor(Math.random() * words.length)];
+        resultDiv.innerHTML = `🎨 (Демо) AI предполагает, что это: <span class="result">${randomWord}</span> (в реальном режиме нужен доступ к API)`;
+    }
+}
+
+// ---- Закладчик (полная реализация) ----
+let runnerState = { player: { x: 4, y: 4 }, drops: [], cops: [], score: 0, gameOver: false, level: 1, gridSize: 9, dropTarget: 5, keys: {} };
+let runnerInterval = null;
+
+function renderRunnerGame() {
+    resetRunnerGame();
+    const html = `
+        <div class="game-container" style="max-width:500px;">
+            <h2>🏃 Закладчик</h2>
+            <div class="game-stats">
+                <span>📦 Закладки: <span id="runnerScore">${runnerState.score}</span></span>
+                <span>🎯 Цель: <span id="runnerTarget">${runnerState.dropTarget}</span></span>
+                <span>🚔 Полиция: <span id="runnerCops">${runnerState.cops.length}</span></span>
+            </div>
+            <div class="game-canvas-wrapper">
+                <canvas id="runnerCanvas" width="400" height="400"></canvas>
+            </div>
+            <div style="margin-top:10px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+                <button class="btn btn-secondary" onclick="resetRunnerGame()">🔄 Новая игра</button>
+                <button class="btn btn-secondary" onclick="showPage('game')">← Назад</button>
+            </div>
+            <div id="runnerMessage" style="margin-top:10px; font-weight:600; color:#f9a825;"></div>
+        </div>
+    `;
+    document.getElementById('pageContent').innerHTML = html;
+    const canvas = document.getElementById('runnerCanvas');
+    const ctx = canvas.getContext('2d');
+    document.addEventListener('keydown', (e) => {
+        runnerState.keys[e.key] = true;
+        if (e.key === ' ' || e.key === 'Space') {
+            e.preventDefault();
+            if (!runnerState.gameOver) dropPackage();
+        }
+    });
+    document.addEventListener('keyup', (e) => { runnerState.keys[e.key] = false; });
+    if (runnerInterval) clearInterval(runnerInterval);
+    runnerInterval = setInterval(() => gameLoop(ctx), 200);
+    drawCanvas(ctx);
+}
+
+function resetRunnerGame() {
+    runnerState = {
+        player: { x: 4, y: 4 },
+        drops: [],
+        cops: [],
+        score: 0,
+        gameOver: false,
+        level: 1,
+        gridSize: 9,
+        dropTarget: 5,
+        keys: {}
+    };
+    for (let i = 0; i < 3; i++) {
+        let pos;
+        do {
+            pos = { x: Math.floor(Math.random() * 9), y: Math.floor(Math.random() * 9) };
+        } while (pos.x === runnerState.player.x && pos.y === runnerState.player.y);
+        runnerState.drops.push({ x: pos.x, y: pos.y, active: true });
+    }
+    for (let i = 0; i < 2; i++) {
+        let pos;
+        do {
+            pos = { x: Math.floor(Math.random() * 9), y: Math.floor(Math.random() * 9) };
+        } while (pos.x === runnerState.player.x && pos.y === runnerState.player.y);
+        runnerState.cops.push({ x: pos.x, y: pos.y });
+    }
+    const msg = document.getElementById('runnerMessage');
+    if (msg) msg.textContent = 'Соберите все закладки и избегайте полиции!';
+}
+
+function dropPackage() {
+    if (runnerState.gameOver) return;
+    const idx = runnerState.drops.findIndex(d => d.x === runnerState.player.x && d.y === runnerState.player.y && d.active);
+    if (idx !== -1) {
+        runnerState.drops[idx].active = false;
+        runnerState.score++;
+        const target = document.getElementById('runnerTarget');
+        if (target) target.textContent = runnerState.dropTarget;
+        const score = document.getElementById('runnerScore');
+        if (score) score.textContent = runnerState.score;
+        if (runnerState.score >= runnerState.dropTarget) {
+            runnerState.gameOver = true;
+            const msg = document.getElementById('runnerMessage');
+            if (msg) msg.textContent = '🎉 Победа!';
+        }
+        if (!runnerState.gameOver) {
+            let pos;
+            let attempts = 0;
+            do {
+                pos = { x: Math.floor(Math.random() * 9), y: Math.floor(Math.random() * 9) };
+                attempts++;
+            } while ((pos.x === runnerState.player.x && pos.y === runnerState.player.y) ||
+                     runnerState.drops.some(d => d.x === pos.x && d.y === pos.y && d.active) &&
+                     attempts < 50);
+            runnerState.drops.push({ x: pos.x, y: pos.y, active: true });
+        }
+        if (runnerState.score % 3 === 0 && runnerState.cops.length < 5) {
+            runnerState.cops.push({ x: Math.floor(Math.random() * 9), y: Math.floor(Math.random() * 9) });
+            const copsSpan = document.getElementById('runnerCops');
+            if (copsSpan) copsSpan.textContent = runnerState.cops.length;
+        }
+    } else {
+        const msg = document.getElementById('runnerMessage');
+        if (msg) msg.textContent = 'Здесь нет закладки!';
+        setTimeout(() => { if (msg) msg.textContent = ''; }, 1000);
+    }
+}
+
+function gameLoop(ctx) {
+    if (runnerState.gameOver) return;
+    const p = runnerState.player;
+    let dx = 0, dy = 0;
+    if (runnerState.keys['ArrowUp'] || runnerState.keys['w']) dy = -1;
+    if (runnerState.keys['ArrowDown'] || runnerState.keys['s']) dy = 1;
+    if (runnerState.keys['ArrowLeft'] || runnerState.keys['a']) dx = -1;
+    if (runnerState.keys['ArrowRight'] || runnerState.keys['d']) dx = 1;
+    if (dx !== 0 || dy !== 0) {
+        const newX = p.x + dx;
+        const newY = p.y + dy;
+        if (newX >= 0 && newX < 9 && newY >= 0 && newY < 9) {
+            p.x = newX;
+            p.y = newY;
+        }
+    }
+    runnerState.cops.forEach(cop => {
+        if (Math.random() < 0.4) {
+            const dx2 = Math.sign(runnerState.player.x - cop.x);
+            const dy2 = Math.sign(runnerState.player.y - cop.y);
+            if (Math.random() < 0.5) {
+                if (cop.x + dx2 >= 0 && cop.x + dx2 < 9) cop.x += dx2;
+            } else {
+                if (cop.y + dy2 >= 0 && cop.y + dy2 < 9) cop.y += dy2;
+            }
+        } else {
+            const dirs = [{x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0}];
+            const dir = dirs[Math.floor(Math.random() * dirs.length)];
+            const nx = cop.x + dir.x;
+            const ny = cop.y + dir.y;
+            if (nx >= 0 && nx < 9 && ny >= 0 && ny < 9) {
+                cop.x = nx;
+                cop.y = ny;
+            }
+        }
+    });
+    const hit = runnerState.cops.some(c => c.x === p.x && c.y === p.y);
+    if (hit) {
+        runnerState.gameOver = true;
+        const msg = document.getElementById('runnerMessage');
+        if (msg) msg.textContent = '💀 Вас поймали!';
+        if (runnerInterval) clearInterval(runnerInterval);
+    }
+    drawCanvas(ctx);
+}
+
+function drawCanvas(ctx) {
+    const size = 400 / 9;
+    ctx.clearRect(0, 0, 400, 400);
+    for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+            ctx.fillStyle = (i + j) % 2 === 0 ? '#1a1a2a' : '#222244';
+            ctx.fillRect(i * size, j * size, size, size);
+            ctx.strokeStyle = '#2a2a3a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * size, j * size, size, size);
+        }
+    }
+    runnerState.drops.filter(d => d.active).forEach(d => {
+        ctx.fillStyle = '#4caf50';
+        ctx.beginPath();
+        ctx.arc(d.x * size + size/2, d.y * size + size/2, size * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('📦', d.x * size + size/2, d.y * size + size/2);
+    });
+    runnerState.cops.forEach(c => {
+        ctx.fillStyle = '#d32f2f';
+        ctx.beginPath();
+        ctx.arc(c.x * size + size/2, c.y * size + size/2, size * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🚔', c.x * size + size/2, c.y * size + size/2);
+    });
+    const p = runnerState.player;
+    ctx.fillStyle = '#00d4ff';
+    ctx.beginPath();
+    ctx.arc(p.x * size + size/2, p.y * size + size/2, size * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🧑', p.x * size + size/2, p.y * size + size/2);
+    ctx.fillStyle = '#888';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('Стрелки/WASD - движение, Space - взять закладку', 10, 395);
+}
+
 // ================================================================
-// ОСТАЛЬНЫЕ ИГРЫ (заглушки, но рабочие)
+// AI (ДЕМО)
 // ================================================================
-function renderGameHub() {
+function renderAI() {
     document.getElementById('pageContent').innerHTML = `
-        <div class="game-hub"><h2>🎮 Игровой центр</h2>
-        <div class="game-grid">
-            <div class="game-card" onclick="showPage('game','tictactoe')"><span class="icon">❌⭕</span><h3>Крестики-нолики</h3></div>
-            <div class="game-card" onclick="showPage('game','minesweeper')"><span class="icon">💣</span><h3>Сапёр</h3></div>
-            <div class="game-card" onclick="showPage('game','village')"><span class="icon">🏡</span><h3>Построй деревню</h3></div>
-            <div class="game-card" onclick="showPage('game','paint')"><span class="icon">🎨</span><h3>Paint</h3></div>
-            <div class="game-card" onclick="showPage('game','runner')"><span class="icon">🏃</span><h3>Закладчик</h3></div>
-        </div></div>
+        <div class="ai-container">
+            <h2 style="text-align:center;font-size:28px;margin-bottom:20px;">🤖 AI Ассистент (демо)</h2>
+            <div class="ai-chat" id="aiChat">
+                <div class="msg system-msg">Задайте вопрос</div>
+            </div>
+            <div class="ai-input">
+                <input type="text" id="aiInput" placeholder="Спросите что-нибудь..." onkeydown="if(event.key==='Enter') sendAIMessage()">
+                <button class="btn" onclick="sendAIMessage()">Отправить</button>
+            </div>
+        </div>
     `;
 }
 
-function renderTicTacToe() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>❌⭕ Крестики-нолики</h2><p>В разработке</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
-function renderMinesweeper() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>💣 Сапёр</h2><p>В разработке</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
-function renderPaint() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>🎨 Paint</h2><p>В разработке</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
-function renderRunnerGame() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>🏃 Закладчик</h2><p>В разработке</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
+function sendAIMessage() {
+    const input = document.getElementById('aiInput');
+    if (!input) return;
+    const q = input.value.trim();
+    if (!q) return;
+    const chat = document.getElementById('aiChat');
+    const userMsg = document.createElement('div');
+    userMsg.className = 'msg user';
+    userMsg.textContent = q;
+    chat.appendChild(userMsg);
+    input.value = '';
+    chat.scrollTop = chat.scrollHeight;
+    setTimeout(() => {
+        const reply = document.createElement('div');
+        reply.className = 'msg assistant';
+        reply.textContent = getDemoResponse(q);
+        chat.appendChild(reply);
+        chat.scrollTop = chat.scrollHeight;
+    }, 500);
+}
+
+function getDemoResponse(q) {
+    const text = q.toLowerCase();
+    if (text.includes('привет')) return 'Привет!';
+    if (text.includes('как дела')) return 'Отлично!';
+    if (text.includes('товар')) return 'Смотрите каталог.';
+    if (text.includes('игра')) return 'Игры в разделе "Игры".';
+    return 'Хороший вопрос! Попробуйте уточнить.';
+}
 
 // ================================================================
-// AI, КАТАЛОГ, КОРЗИНА, ЗАКАЗЫ, ЧАТЫ, ПРОФИЛЬ, ПРАВИЛА – УПРОЩЁННО (но функционально)
+// ДОБАВЛЕНИЕ / РЕДАКТИРОВАНИЕ ТОВАРОВ
 // ================================================================
-function renderAI() { document.getElementById('pageContent').innerHTML = '<div class="ai-container"><h2>🤖 AI</h2><p>Демо-режим</p></div>'; }
+function renderAddProduct() {
+    if (!currentUser.username) { showPage('login'); return; }
+    document.getElementById('pageContent').innerHTML = `
+        <h2>Продажа товара</h2>
+        <div class="add-product-form">
+            <form id="addProductForm" enctype="multipart/form-data">
+                <div class="form-group"><label>Название</label><input type="text" id="prodName" required></div>
+                <div class="form-group"><label>Цена</label><input type="number" id="prodPrice" required></div>
+                <div class="form-group"><label>Описание</label><textarea id="prodDesc" rows="3"></textarea></div>
+                <div class="form-group"><label>Изображение</label><input type="file" id="prodImage" accept="image/*"></div>
+                <div class="form-group"><label>Номер карты</label><input type="text" id="prodCard" required placeholder="Номер карты для оплаты"></div>
+                <div class="form-group"><label>Жанры (макс. 2)</label>
+                    <div class="genre-checkboxes">${GENRES.map(g => `<label><input type="checkbox" class="genre-check" value="${g}"> ${GENRE_EMOJI[g]} ${g.charAt(0).toUpperCase()+g.slice(1)}</label>`).join('')}</div>
+                </div>
+                <button type="submit" class="btn btn-success">Опубликовать</button>
+                <button type="button" class="btn btn-secondary" onclick="showPage('catalog')">Отмена</button>
+            </form>
+        </div>
+    `;
+    const checkboxes = document.querySelectorAll('.genre-check');
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+            const checked = document.querySelectorAll('.genre-check:checked');
+            if (checked.length > 2) { this.checked = false; alert('Максимум 2 жанра'); }
+        });
+    });
+    document.getElementById('addProductForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const name = document.getElementById('prodName').value.trim();
+        const price = parseFloat(document.getElementById('prodPrice').value);
+        const desc = document.getElementById('prodDesc').value.trim();
+        const card = document.getElementById('prodCard').value.trim();
+        const selectedGenres = Array.from(document.querySelectorAll('.genre-check:checked')).map(cb => cb.value);
+        if (!name || isNaN(price)) { alert('Заполните название и цену'); return; }
+        if (!card) { alert('Введите номер карты'); return; }
+        if (selectedGenres.length === 0 || selectedGenres.length > 2) { alert('Выберите 1-2 жанра'); return; }
+        const fileInput = document.getElementById('prodImage');
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            const image = ev.target.result || '';
+            const newProduct = {
+                id: products.length ? Math.max(...products.map(p => p.id)) + 1 : 1,
+                name, price, description: desc, image, sellerId: currentUser.username,
+                status: 'approved', reviews: [], cardNumber: card, genres: selectedGenres
+            };
+            products.push(newProduct);
+            saveProducts();
+            alert('Товар опубликован');
+            showPage('catalog');
+        };
+        if (fileInput.files.length > 0) reader.readAsDataURL(fileInput.files[0]);
+        else reader.onload(null);
+    });
+}
 
-// Заглушки для остальных страниц
-function renderCart() { document.getElementById('pageContent').innerHTML = '<h2>Корзина</h2><p>Корзина пуста</p>'; }
-function renderMyOrders() { document.getElementById('pageContent').innerHTML = '<h2>Мои заказы</h2><p>Нет заказов</p>'; }
-function renderChatsList() { document.getElementById('pageContent').innerHTML = '<h2>Чаты</h2><p>Нет чатов</p>'; }
-function renderChat(id) { document.getElementById('pageContent').innerHTML = `<h2>Чат #${id}</h2><p>Сообщений нет</p>`; }
-function renderGlobalChat() { document.getElementById('pageContent').innerHTML = '<div class="global-chat-container"><h2>Общий чат</h2><p>В разработке</p></div>'; }
-function renderRules() { document.getElementById('pageContent').innerHTML = '<div class="rules-container"><h1>Правила</h1><p>1. Переводите деньги напрямую продавцу.</p></div>'; }
-function renderAddProduct() { document.getElementById('pageContent').innerHTML = '<h2>Добавить товар</h2><p>Форма добавления</p>'; }
-function renderEditProduct(id) { document.getElementById('pageContent').innerHTML = `<h2>Редактировать товар #${id}</h2>`; }
-function renderProduct(id) { document.getElementById('pageContent').innerHTML = `<h2>Товар #${id}</h2>`; }
-function renderOrderForm() { document.getElementById('pageContent').innerHTML = '<h2>Оформление заказа</h2><form><button>Подтвердить</button></form>'; }
+function renderEditProduct(id) {
+    alert('Редактирование товара временно отключено');
+    showPage('catalog');
+}
 
-// ================================================================
-// ВСПОМОГАТЕЛЬНЫЕ ДАННЫЕ
-// ================================================================
-const GENRES = ['услуги','порошки','рецепты','скрипты','оружие','вирусы'];
-const GENRE_EMOJI = { услуги:'🛠', порошки:'🧪', рецепты:'📜', скрипты:'💻', оружие:'🔫', вирусы:'🦠' };
-let searchQuery = '', selectedGenre = 'all';
-
-function filterProducts() { /* заглушка */ }
-function selectGenre(genre) { selectedGenre = genre; filterProducts(); }
+function renderProduct(id) {
+    const prod = products.find(p => p.id === id);
+    if (!prod) { document.getElementById('pageContent').innerHTML = '<p>Товар не найден</p>'; return; }
+    document.getElementById('pageContent').innerHTML = `
+        <h2>${prod.name}</h2>
+        <p>${prod.description}</p>
+        <p>Цена: ${prod.price} руб.</p>
+        <p>Продавец: ${prod.sellerId || 'Аноним'}</p>
+        <button class="btn" onclick="addToCart(${prod.id})">В корзину</button>
+        <button class="btn btn-secondary" onclick="showPage('catalog')">Назад</button>
+    `;
+}
 
 // ================================================================
 // ОНЛАЙН-СТАТУС (имитация)
@@ -722,28 +1734,23 @@ function updateOnlineStatus() {
 }
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
-document.getElementById('onlineCount').textContent = Math.floor(Math.random() * 5) + 1; // случайное количество онлайн
+document.getElementById('onlineCount').textContent = Math.floor(Math.random() * 5) + 1; // случайное число
 
 // ================================================================
 // ИНИЦИАЛИЗАЦИЯ
 // ================================================================
 document.addEventListener('DOMContentLoaded', function() {
     // Восстановление пользователя
-    const saved = localStorage.getItem('trueshop_user');
-    if (saved) {
-        try {
-            const parsed = JSON.parse(saved);
-            if (parsed.username) {
-                currentUser = parsed;
-                updateUserInfo();
-                showPage('catalog');
-                return;
-            }
-        } catch(e) {}
+    if (currentUser.username) {
+        updateUserInfo();
+        showPage('catalog');
+    } else {
+        showPage('login');
     }
-    showPage('login');
-    ensureVillageState();
+    updateCartCount();
     updateOnlineStatus();
+    ensureVillageState();
+    initMinesweeper();
 });
 </script>
 </body>

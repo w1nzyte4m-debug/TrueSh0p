@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TrueShop</title>
     <style>
-        /* ===== БАЗОВЫЕ СТИЛИ (сжатые) ===== */
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b0b0e;color:#e0e0e0;min-height:100vh;display:flex;justify-content:center;padding:20px;background-image:radial-gradient(circle at 20% 50%,#1a1a2e 0%,#0b0b0e 80%)}
         .container{max-width:1300px;width:100%;background:rgba(20,20,30,.85);backdrop-filter:blur(12px);border-radius:32px;padding:24px 28px;box-shadow:0 25px 60px rgba(0,0,0,.8);border:1px solid rgba(255,255,255,.04);display:flex;flex-direction:column;min-height:90vh}
@@ -31,7 +30,6 @@
         @keyframes fadeIn{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
         .footer{margin-top:auto;padding:20px 0 10px;border-top:1px solid rgba(255,255,255,.06);text-align:center;color:#888;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:10px}
         .footer img{max-width:150px;border-radius:12px;border:1px solid #2a2a3a}
-        /* ===== КАТАЛОГ ===== */
         .search-bar{display:flex;align-items:center;background:#1a1a24;border-radius:60px;padding:4px 4px 4px 20px;border:1px solid #2a2a3a;transition:.3s;margin-bottom:12px;flex-wrap:wrap;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.3)}
         .search-bar:focus-within{border-color:#00d4ff;box-shadow:0 0 30px rgba(0,212,255,.15);transform:scale(1.01)}
         .search-bar input{flex:1;background:transparent;border:none;color:#fff;padding:14px 8px;font-size:16px;outline:none;min-width:120px}
@@ -151,7 +149,7 @@
         .game-card .icon{font-size:60px;margin-bottom:15px;display:block}
         .game-card h3{font-size:22px;color:#fff;margin-bottom:8px}
         .game-card p{color:#888;font-size:14px}
-        .game-container{max-width:500px;margin:0 auto;text-align:center;background:#151520;padding:30px;border-radius:28px;border:1px solid #2a2a3a;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+        .game-container{max-width:600px;margin:0 auto;text-align:center;background:#151520;padding:30px;border-radius:28px;border:1px solid #2a2a3a;box-shadow:0 8px 30px rgba(0,0,0,.4)}
         .game-container h2{font-size:28px;margin-bottom:20px;color:#fff}
         .game-mode-selector{display:flex;gap:12px;justify-content:center;margin-bottom:20px}
         .game-mode-selector button{padding:8px 24px;border-radius:40px;background:#2a2a3a;color:#aaa;border:2px solid transparent;cursor:pointer;transition:.2s;font-weight:600}
@@ -237,12 +235,24 @@
         .global-chat-input input{flex:1;padding:12px 20px;background:#0e0e18;border:1px solid #2a2a3a;color:#fff;border-radius:60px;font-size:14px}
         .global-chat-input input:focus{border-color:#00d4ff;outline:none}
         .global-chat-input button{padding:12px 24px}
-        /* Игра Закладчик */
         .game-canvas-wrapper{display:flex;justify-content:center;margin:20px 0}
         .game-canvas-wrapper canvas{background:#1a1a2a;border-radius:16px;border:2px solid #2a2a3a;max-width:100%}
         .game-stats{display:flex;justify-content:center;gap:30px;margin:10px 0;font-size:18px;color:#aaa}
         .game-stats span{font-weight:700;color:#fff}
-        @media (max-width:700px){.header{flex-direction:column;align-items:stretch;gap:10px}.nav{justify-content:center}.product-grid{grid-template-columns:1fr}.profile-header{flex-direction:column;align-items:center;text-align:center}.search-bar{max-width:100%}.search-bar input{min-width:80px}.genre-chips{justify-content:center}.container{padding:16px}.game-grid{grid-template-columns:1fr}.village-container{flex-direction:column}.minesweeper-board{max-width:320px}.minesweeper-cell{font-size:14px}.game-board{max-width:260px;gap:8px}.game-cell{font-size:36px}.ai-settings{flex-direction:column}.paint-canvas-wrapper canvas{max-width:100%}}
+        /* Морская битва */
+        .sea-board{display:inline-grid;grid-template-columns:repeat(10,30px);gap:2px;background:#0e0e18;padding:10px;border-radius:8px;border:1px solid #2a2a3a}
+        .sea-cell{width:30px;height:30px;background:#1a1a2a;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:.2s}
+        .sea-cell:hover{background:#2a2a3a}
+        .sea-cell.ship{background:#4caf50}
+        .sea-cell.hit{background:#f44336}
+        .sea-cell.miss{background:#555}
+        .sea-cell.ship-hit{background:#ff9800}
+        .sea-cell.disabled{pointer-events:none;opacity:.6}
+        .sea-cell.enemy{background:#1a1a2a}
+        .sea-cell.enemy.ship{background:#4caf50}
+        .sea-cell.enemy.hit{background:#f44336}
+        .sea-cell.enemy.miss{background:#555}
+        @media (max-width:700px){.header{flex-direction:column;align-items:stretch;gap:10px}.nav{justify-content:center}.product-grid{grid-template-columns:1fr}.profile-header{flex-direction:column;align-items:center;text-align:center}.search-bar{max-width:100%}.search-bar input{min-width:80px}.genre-chips{justify-content:center}.container{padding:16px}.game-grid{grid-template-columns:1fr}.village-container{flex-direction:column}.minesweeper-board{max-width:320px}.minesweeper-cell{font-size:14px}.game-board{max-width:260px;gap:8px}.game-cell{font-size:36px}.ai-settings{flex-direction:column}.paint-canvas-wrapper canvas{max-width:100%}.sea-board{grid-template-columns:repeat(10,24px)}.sea-cell{width:24px;height:24px}}
         .reset-link{color:#00d4ff;cursor:pointer}
         .reset-link:hover{text-decoration:underline}
         .popup-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
@@ -262,7 +272,7 @@
     <div class="header">
         <div class="logo">True<span>Shop</span></div>
         <div class="nav">
-            <span class="online-indicator" title="Статус соединения"><span class="online-dot online" id="onlineDot"></span><span id="onlineText" style="font-size:13px;">Онлайн</span></span>
+            <span class="online-indicator"><span class="online-dot online" id="onlineDot"></span><span id="onlineText" style="font-size:13px;">Онлайн</span></span>
             <span class="online-counter"><span class="count" id="onlineCount">0</span> 👤</span>
             <a onclick="showPage('catalog')"><i>🏠</i> Каталог</a>
             <a onclick="showPage('cart')"><i>🛒</i> Корзина (<span id="cartCount">0</span>)</a>
@@ -284,36 +294,81 @@
 
 <script>
 // ================================================================
-// ==== ПОЛНЫЙ РАБОЧИЙ КОД (ИСПРАВЛЕННЫЙ) ====
+// НАСТРОЙКИ JSONBIN (ЗАМЕНИТЕ НА СВОИ)
 // ================================================================
+const BIN_ID = 'YOUR_BIN_ID';
+const API_KEY = 'YOUR_API_KEY';
+const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+const HEADERS = { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY };
 
-// --- ДАННЫЕ ---
+// ================================================================
+// ГЛОБАЛЬНЫЕ ДАННЫЕ
+// ================================================================
+let data = { users: [], products: [], orders: [], chat: [], online: [] };
+let currentUser = { username: null, avatar: '' };
 const GENRES = ['услуги','порошки','рецепты','скрипты','оружие','вирусы'];
 const GENRE_EMOJI = { услуги:'🛠', порошки:'🧪', рецепты:'📜', скрипты:'💻', оружие:'🔫', вирусы:'🦠' };
 let searchQuery = '', selectedGenre = 'all';
-let currentUser = JSON.parse(localStorage.getItem('trueshop_user')) || { username: null, avatar: '' };
-let products = JSON.parse(localStorage.getItem('trueshop_products')) || [
-    { id: 1, name: 'Товар 1', price: 100, description: 'Описание товара 1', image: '', sellerId: 'EkasVavi', status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['услуги'] },
-    { id: 2, name: 'Товар 2', price: 200, description: 'Описание товара 2', image: '', sellerId: 'EkasVave', status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['порошки'] },
-    { id: 3, name: 'Ноутбук', price: 50000, description: 'Мощный ноутбук', image: '', sellerId: 'DemoUser', status: 'approved', reviews: [], cardNumber: '9876 5432 1098 7654', genres: ['рецепты'] },
-    { id: 4, name: 'АК-47', price: 15000, description: 'Автомат Калашникова', image: '', sellerId: 'EkasVavi', status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['оружие'] },
-    { id: 5, name: 'Вирус-шифровальщик', price: 500, description: 'Программа для шифрования', image: '', sellerId: 'EkasVave', status: 'approved', reviews: [], cardNumber: '9876 5432 1098 7654', genres: ['вирусы'] }
-];
-let orders = JSON.parse(localStorage.getItem('trueshop_orders')) || [];
-let chatMessages = JSON.parse(localStorage.getItem('trueshop_chat')) || [];
 
-// --- СОХРАНЕНИЕ ---
-function saveProducts() { localStorage.setItem('trueshop_products', JSON.stringify(products)); }
-function saveOrders() { localStorage.setItem('trueshop_orders', JSON.stringify(orders)); }
-function saveChat() { localStorage.setItem('trueshop_chat', JSON.stringify(chatMessages)); }
-function saveUser() { localStorage.setItem('trueshop_user', JSON.stringify(currentUser)); }
+// ================================================================
+// РАБОТА С JSONBIN
+// ================================================================
+async function loadData() {
+    try {
+        const res = await fetch(BIN_URL, { headers: HEADERS });
+        if (!res.ok) throw new Error('Ошибка загрузки');
+        const json = await res.json();
+        data = json.record || { users: [], products: [], orders: [], chat: [], online: [] };
+        if (!data.users) data.users = [];
+        if (!data.products) data.products = [];
+        if (!data.orders) data.orders = [];
+        if (!data.chat) data.chat = [];
+        if (!data.online) data.online = [];
+        if (data.users.length === 0) {
+            data.users.push({ id: 1, username: 'Admin', email: 'admin@trueshop.com', password: '', avatar: '', cardNumber: '1234 5678 9012 3456', banned: false });
+            await saveData();
+        }
+        await updateOnlineList();
+    } catch (e) { console.error(e); }
+}
+async function saveData() {
+    try {
+        await fetch(BIN_URL, { method: 'PUT', headers: HEADERS, body: JSON.stringify(data) });
+    } catch (e) { console.error(e); }
+}
 
-// --- ПОЛЬЗОВАТЕЛЬ ---
+// ================================================================
+// ОНЛАЙН-СЧЁТЧИК
+// ================================================================
+async function updateOnlineList() {
+    const user = getCurrentUser();
+    if (user) {
+        const now = Date.now();
+        const existing = data.online.find(o => o.userId === user.id);
+        if (existing) existing.lastSeen = now;
+        else data.online.push({ userId: user.id, username: user.username, lastSeen: now });
+        data.online = data.online.filter(o => Date.now() - o.lastSeen < 30000);
+        await saveData();
+    }
+    document.getElementById('onlineCount').textContent = data.online.length;
+}
+setInterval(async () => { await loadData(); await updateOnlineList(); }, 10000);
+
+// ================================================================
+// ПОЛЬЗОВАТЕЛИ
+// ================================================================
 function getCurrentUser() { return currentUser; }
-function loginUser(username) {
+async function loginUser(username) {
     if (!username.trim()) { alert('Введите ник'); return false; }
-    currentUser.username = username.trim();
-    if (!currentUser.avatar) currentUser.avatar = '';
+    await loadData();
+    let user = data.users.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
+    if (!user) {
+        user = { id: data.users.length ? Math.max(...data.users.map(u=>u.id))+1 : 1, username: username.trim(), email: '', password: '', avatar: '', cardNumber: '', banned: false };
+        data.users.push(user);
+        await saveData();
+    }
+    if (user.banned) { alert('Вы забанены'); return false; }
+    currentUser = { username: user.username, avatar: user.avatar, id: user.id };
     saveUser();
     updateUserInfo();
     showPage('catalog');
@@ -321,9 +376,15 @@ function loginUser(username) {
 }
 function logout() {
     currentUser = { username: null, avatar: '' };
-    saveUser();
+    localStorage.removeItem('trueshop_user');
     updateUserInfo();
     showPage('login');
+}
+function saveUser() { localStorage.setItem('trueshop_user', JSON.stringify(currentUser)); }
+function loadUser() {
+    const saved = localStorage.getItem('trueshop_user');
+    if (saved) try { const p = JSON.parse(saved); if (p.username) { currentUser = p; return true; } } catch(e) {}
+    return false;
 }
 function updateUserInfo() {
     const el = document.getElementById('userInfo');
@@ -335,7 +396,9 @@ function updateUserInfo() {
     }
 }
 
-// --- КОРЗИНА ---
+// ================================================================
+// КОРЗИНА
+// ================================================================
 function getCart() { return JSON.parse(localStorage.getItem('trueshop_cart')) || []; }
 function saveCart(cart) { localStorage.setItem('trueshop_cart', JSON.stringify(cart)); updateCartCount(); }
 function updateCartCount() {
@@ -344,13 +407,10 @@ function updateCartCount() {
     document.getElementById('cartCount').textContent = count;
 }
 function addToCart(id) {
-    const prod = products.find(p => p.id === id);
+    const prod = data.products.find(p => p.id === id);
     if (!prod || prod.status !== 'approved') { alert('Товар недоступен'); return; }
     if (!currentUser.username) { alert('Войдите'); showPage('login'); return; }
-    if (prod.sellerId === currentUser.username) {
-        alert('Вы не можете купить свой собственный товар.');
-        return;
-    }
+    if (prod.sellerId === currentUser.username) { alert('Свой товар нельзя купить'); return; }
     const cart = getCart();
     const existing = cart.find(i => i.id === id);
     if (existing) existing.qty++;
@@ -358,11 +418,7 @@ function addToCart(id) {
     saveCart(cart);
     showPage('catalog');
 }
-function removeFromCart(id) {
-    let cart = getCart().filter(i => i.id !== id);
-    saveCart(cart);
-    renderCart();
-}
+function removeFromCart(id) { let cart = getCart().filter(i => i.id !== id); saveCart(cart); renderCart(); }
 function clearCart() { saveCart([]); renderCart(); }
 
 // ================================================================
@@ -370,10 +426,7 @@ function clearCart() { saveCart([]); renderCart(); }
 // ================================================================
 function showPage(page, param) {
     const content = document.getElementById('pageContent');
-    content.classList.remove('fade-in');
-    void content.offsetWidth;
-    content.classList.add('fade-in');
-
+    content.classList.remove('fade-in'); void content.offsetWidth; content.classList.add('fade-in');
     if (page === 'login') renderLogin();
     else if (page === 'profile') renderProfile();
     else if (page === 'catalog') renderCatalog();
@@ -386,9 +439,10 @@ function showPage(page, param) {
     else if (page === 'game') {
         if (param === 'tictactoe') renderTicTacToe();
         else if (param === 'minesweeper') renderMinesweeper();
-        else if (param === 'village') { ensureVillageState(); renderVillageBuilder(); }
+        else if (param === 'village') renderVillageBuilder();
         else if (param === 'paint') renderPaint();
         else if (param === 'runner') renderRunnerGame();
+        else if (param === 'battleship') renderBattleship();
         else renderGameHub();
     }
     else if (page === 'ai') renderAI();
@@ -397,44 +451,29 @@ function showPage(page, param) {
     else if (page === 'product' && param) renderProduct(param);
     else if (page === 'orderForm') renderOrderForm();
     else content.innerHTML = '<p>Страница не найдена</p>';
-
     sessionStorage.setItem('currentPage', page);
     if (page === 'catalog') { searchQuery = ''; selectedGenre = 'all'; }
     window.scrollTo({ top:0, behavior:'smooth' });
-    // Убираем обработчик клавиш для удаления, если страница не каталог
-    if (page !== 'catalog') {
-        document.removeEventListener('keydown', deleteProductHandler);
-    } else {
-        document.addEventListener('keydown', deleteProductHandler);
-    }
+    if (page !== 'catalog') document.removeEventListener('keydown', deleteProductHandler);
+    else document.addEventListener('keydown', deleteProductHandler);
 }
 
 // ================================================================
-// УДАЛЕНИЕ ТОВАРА ПО НАЖАТИЮ DELETE ИЛИ RIGHT SHIFT
+// УДАЛЕНИЕ ТОВАРОВ (SHIFT+DELETE)
 // ================================================================
 let hoveredProductId = null;
-
 function deleteProductHandler(e) {
-    // Проверяем, нажат ли Delete или правый Shift (код 16, но мы проверяем event.shiftKey и код)
     if (e.key === 'Delete' || (e.key === 'Shift' && e.location === 2)) {
-        if (hoveredProductId !== null) {
-            const prod = products.find(p => p.id === hoveredProductId);
-            if (prod && prod.sellerId === currentUser.username) {
-                if (confirm(`Удалить товар "${prod.name}"?`)) {
-                    products = products.filter(p => p.id !== hoveredProductId);
-                    saveProducts();
-                    filterProducts(); // перерисовка
-                    hoveredProductId = null;
-                    alert('Товар удалён');
-                }
-            } else {
-                alert('Вы не можете удалить этот товар (он не ваш)');
+        e.preventDefault();
+        if (hoveredProductId !== null && currentUser.username) {
+            const prod = data.products.find(p => p.id === hoveredProductId);
+            if (prod && confirm(`Удалить товар "${prod.name}"?`)) {
+                data.products = data.products.filter(p => p.id !== hoveredProductId);
+                saveData().then(() => { filterProducts(); hoveredProductId = null; alert('Удалено'); });
             }
         }
     }
 }
-
-// Добавляем обработчик при загрузке каталога
 document.addEventListener('keydown', deleteProductHandler);
 
 // ================================================================
@@ -446,10 +485,7 @@ function renderLogin() {
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;">
             <h2 style="font-size:32px;margin-bottom:20px;">Добро пожаловать в TrueShop</h2>
             <form id="loginForm" style="background:#151520;padding:40px;border-radius:28px;border:1px solid #2a2a3a;max-width:400px;width:100%;">
-                <div class="form-group">
-                    <label>Введите ваш ник</label>
-                    <input type="text" id="loginUsername" required placeholder="Ваш уникальный ник" style="padding:14px;font-size:18px;">
-                </div>
+                <div class="form-group"><label>Введите ваш ник</label><input type="text" id="loginUsername" required placeholder="Ваш уникальный ник" style="padding:14px;font-size:18px;"></div>
                 <button type="submit" class="btn" style="width:100%;padding:14px;font-size:18px;">Войти</button>
                 <div style="margin-top:12px;color:#888;font-size:14px;">Ник сохранится в браузере. Аватарку можно загрузить в профиле.</div>
             </form>
@@ -485,15 +521,15 @@ function uploadAvatar() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.onchange = function(e) {
+    input.onchange = async function(e) {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = function(ev) {
-                currentUser.avatar = ev.target.result;
-                saveUser();
-                updateUserInfo();
-                renderProfile();
+            reader.onload = async function(ev) {
+                const avatar = ev.target.result;
+                await loadData();
+                const user = data.users.find(u => u.username === currentUser.username);
+                if (user) { user.avatar = avatar; await saveData(); currentUser.avatar = avatar; saveUser(); updateUserInfo(); renderProfile(); }
             };
             reader.readAsDataURL(file);
         }
@@ -502,12 +538,13 @@ function uploadAvatar() {
 }
 
 // ================================================================
-// КАТАЛОГ (С УДАЛЕНИЕМ)
+// КАТАЛОГ (общие товары)
 // ================================================================
-function renderCatalog() {
+async function renderCatalog() {
+    await loadData();
     let html = `
         <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="searchInput" placeholder="Поиск..." oninput="filterProducts()" value="${searchQuery}"><button class="btn-search" onclick="filterProducts()">Найти</button></div>
-        <div class="genre-chips" id="genreChips"><div class="genre-chip all active" data-genre="all" onclick="selectGenre('all')">Все</div>${GENRES.map(g=>`<div class="genre-chip ${g}" data-genre="${g}" onclick="selectGenre('${g}')">${GENRE_EMOJI[g]} ${g.charAt(0).toUpperCase()+g.slice(1)}</div>`).join('')}</div>
+        <div class="genre-chips"><div class="genre-chip all active" data-genre="all" onclick="selectGenre('all')">Все</div>${GENRES.map(g=>`<div class="genre-chip ${g}" data-genre="${g}" onclick="selectGenre('${g}')">${GENRE_EMOJI[g]} ${g.charAt(0).toUpperCase()+g.slice(1)}</div>`).join('')}</div>
         <div id="catalogContent"><div class="section-header"><h2 id="sectionTitle">Все товары</h2><span class="count" id="sectionCount"></span></div><div id="productGrid" class="product-grid"></div></div>
     `;
     document.getElementById('pageContent').innerHTML = html;
@@ -522,21 +559,12 @@ function renderCatalog() {
         else chip.classList.remove('active');
     });
     filterProducts();
-    // Добавляем обработчик mouseover/mouseout для отслеживания наведения
     document.getElementById('productGrid')?.addEventListener('mouseover', function(e) {
         const card = e.target.closest('.product-card');
-        if (card) {
-            hoveredProductId = parseInt(card.dataset.id);
-        }
+        if (card) hoveredProductId = parseInt(card.dataset.id);
     });
-    document.getElementById('productGrid')?.addEventListener('mouseout', function(e) {
-        const card = e.target.closest('.product-card');
-        if (card) {
-            hoveredProductId = null;
-        }
-    });
+    document.getElementById('productGrid')?.addEventListener('mouseout', function() { hoveredProductId = null; });
 }
-
 function filterProducts() {
     const input = document.getElementById('searchInput');
     if (input) searchQuery = input.value.trim().toLowerCase();
@@ -544,7 +572,7 @@ function filterProducts() {
     const title = document.getElementById('sectionTitle');
     const countSpan = document.getElementById('sectionCount');
     if (!grid) return;
-    let all = products.filter(p => p.status === 'approved');
+    let all = data.products.filter(p => p.status === 'approved');
     let filtered = all;
     if (searchQuery) filtered = filtered.filter(p => p.name.toLowerCase().includes(searchQuery));
     if (selectedGenre !== 'all') filtered = filtered.filter(p => p.genres && p.genres.includes(selectedGenre));
@@ -557,14 +585,13 @@ function filterProducts() {
         const genresHtml = p.genres && p.genres.length ? `<div class="genres">${p.genres.map(g=>`<span class="genre-tag ${g}">${GENRE_EMOJI[g]||''} ${g}</span>`).join('')}</div>` : '';
         const isOwn = currentUser.username && p.sellerId === currentUser.username;
         const buttonHtml = isOwn ? `<span class="badge-own">Это ваш товар</span>` : `<button class="btn" onclick="event.stopPropagation(); addToCart(${p.id})">В корзину</button>`;
-        const deleteHint = isOwn ? `<span class="delete-hint">Удалить (Shift+Del)</span>` : '';
+        const deleteHint = `<span class="delete-hint">Удалить (Shift+Del)</span>`;
         html += `<div class="product-card" data-id="${p.id}" onclick="showPage('product', ${p.id})" style="cursor:pointer; animation: fadeIn 0.4s ease ${index * 0.05}s both;">
             ${imgHtml}<h3>${p.name}</h3><div class="price">${p.price} руб.</div><div class="meta">⭐ ${p.reviews ? p.reviews.length : 0} отзывов</div>${genresHtml}${buttonHtml}${deleteHint}
         </div>`;
     });
     grid.innerHTML = html;
 }
-
 function selectGenre(genre) {
     selectedGenre = genre;
     document.querySelectorAll('.genre-chip').forEach(chip => {
@@ -575,18 +602,15 @@ function selectGenre(genre) {
 }
 
 // ================================================================
-// КОРЗИНА, ЗАКАЗЫ, ЧАТЫ, ПРАВИЛА (сокращённо, но рабочие)
+// КОРЗИНА, ЗАКАЗЫ, ЧАТЫ, ПРАВИЛА (упрощённо, но функционально)
 // ================================================================
 function renderCart() {
     const cart = getCart();
-    if (cart.length === 0) {
-        document.getElementById('pageContent').innerHTML = '<h2>Корзина</h2><p>Корзина пуста.</p>';
-        return;
-    }
+    if (cart.length === 0) { document.getElementById('pageContent').innerHTML = '<h2>Корзина</h2><p>Корзина пуста.</p>'; return; }
     let html = '<h2>Корзина</h2><table class="cart-table"><tr><th>Товар</th><th>Цена</th><th>Кол-во</th><th>Сумма</th><th></th></tr>';
     let total = 0;
     cart.forEach(item => {
-        const prod = products.find(p => p.id === item.id);
+        const prod = data.products.find(p => p.id === item.id);
         if (!prod) return;
         const sum = prod.price * item.qty;
         total += sum;
@@ -597,7 +621,7 @@ function renderCart() {
         <button class="btn btn-danger" onclick="clearCart()">Очистить</button>`;
     document.getElementById('pageContent').innerHTML = html;
 }
-function renderOrderForm() {
+async function renderOrderForm() {
     const cart = getCart();
     if (cart.length === 0) { alert('Корзина пуста'); showPage('cart'); return; }
     if (!currentUser.username) { alert('Войдите'); showPage('login'); return; }
@@ -610,26 +634,18 @@ function renderOrderForm() {
             <button type="button" class="btn btn-secondary" onclick="showPage('cart')">Назад</button>
         </form>
     `;
-    document.getElementById('orderForm').addEventListener('submit', function(e) {
+    document.getElementById('orderForm').addEventListener('submit', async function(e) {
         e.preventDefault();
+        await loadData();
         const name = document.getElementById('orderName').value.trim() || 'Покупатель';
         const phone = document.getElementById('orderPhone').value.trim();
         const cartItems = getCart();
         const orderItems = cartItems.map(item => {
-            const prod = products.find(p => p.id === item.id);
-            return {
-                productId: prod.id,
-                productName: prod.name,
-                price: prod.price,
-                qty: item.qty,
-                total: prod.price * item.qty,
-                buyerName: name,
-                buyerPhone: phone,
-                sellerId: prod.sellerId
-            };
+            const prod = data.products.find(p => p.id === item.id);
+            return { productId: prod.id, productName: prod.name, price: prod.price, qty: item.qty, total: prod.price * item.qty, buyerName: name, buyerPhone: phone, sellerId: prod.sellerId };
         });
         const order = {
-            id: orders.length ? Math.max(...orders.map(o => o.id)) + 1 : 1,
+            id: data.orders.length ? Math.max(...data.orders.map(o=>o.id))+1 : 1,
             items: orderItems,
             buyerName: name,
             buyerId: currentUser.username,
@@ -637,21 +653,19 @@ function renderOrderForm() {
             created: new Date().toLocaleString(),
             messages: [{ senderId: 'system', text: 'Заказ создан.', timestamp: new Date().toLocaleString() }]
         };
-        orders.push(order);
-        saveOrders();
+        data.orders.push(order);
+        await saveData();
         saveCart([]);
         updateCartCount();
         alert('Заказ оформлен!');
         showPage('myOrders');
     });
 }
-function renderMyOrders() {
+async function renderMyOrders() {
     if (!currentUser.username) { showPage('login'); return; }
-    const myOrders = orders.filter(o => o.buyerId === currentUser.username);
-    if (myOrders.length === 0) {
-        document.getElementById('pageContent').innerHTML = '<h2>Мои заказы</h2><p>Нет заказов.</p>';
-        return;
-    }
+    await loadData();
+    const myOrders = data.orders.filter(o => o.buyerId === currentUser.username);
+    if (myOrders.length === 0) { document.getElementById('pageContent').innerHTML = '<h2>Мои заказы</h2><p>Нет заказов.</p>'; return; }
     let html = '<h2>Мои заказы</h2>';
     myOrders.forEach(o => {
         html += `<div class="order-card">
@@ -666,11 +680,8 @@ function renderMyOrders() {
 }
 function renderChatsList() {
     if (!currentUser.username) { showPage('login'); return; }
-    const myOrders = orders.filter(o => o.buyerId === currentUser.username);
-    if (myOrders.length === 0) {
-        document.getElementById('pageContent').innerHTML = '<h2>Чаты</h2><p>Нет заказов для чата.</p>';
-        return;
-    }
+    const myOrders = data.orders.filter(o => o.buyerId === currentUser.username);
+    if (myOrders.length === 0) { document.getElementById('pageContent').innerHTML = '<h2>Чаты</h2><p>Нет заказов для чата.</p>'; return; }
     let html = '<h2>Чаты</h2>';
     myOrders.forEach(o => {
         const lastMsg = o.messages && o.messages.length > 0 ? o.messages[o.messages.length-1].text : 'Нет сообщений';
@@ -681,9 +692,10 @@ function renderChatsList() {
     });
     document.getElementById('pageContent').innerHTML = html;
 }
-function renderChat(orderId) {
+async function renderChat(orderId) {
     if (!currentUser.username) { showPage('login'); return; }
-    const order = orders.find(o => o.id === orderId);
+    await loadData();
+    const order = data.orders.find(o => o.id === orderId);
     if (!order) { alert('Заказ не найден'); showPage('chats'); return; }
     let html = `<h2>Чат по заказу #${order.id}</h2>
         <div class="chat-container">
@@ -716,32 +728,28 @@ function renderChat(orderId) {
     const msgs = document.getElementById('chatMessages');
     if (msgs) msgs.scrollTop = msgs.scrollHeight;
 }
-function sendOrderMessage(orderId) {
+async function sendOrderMessage(orderId) {
     const input = document.getElementById('chatInput');
     if (!input) return;
     const text = input.value.trim();
     if (!text) return;
-    const order = orders.find(o => o.id === orderId);
+    await loadData();
+    const order = data.orders.find(o => o.id === orderId);
     if (!order) return;
     if (!order.messages) order.messages = [];
     order.messages.push({ senderId: currentUser.username, text, timestamp: new Date().toLocaleString() });
-    saveOrders();
+    await saveData();
     input.value = '';
     renderChat(orderId);
 }
-function renderGlobalChat() {
+async function renderGlobalChat() {
+    await loadData();
     let html = `
         <div class="global-chat-container">
             <h2>🌐 Общий чат</h2>
             <div class="global-chat-messages" id="globalChatMessages">
-                ${chatMessages.map(msg => `
-                    <div class="global-chat-msg ${msg.system ? 'system-msg' : ''}">
-                        <span class="sender">${msg.username}</span>
-                        <span class="time">${msg.timestamp || ''}</span>
-                        <div>${msg.text}</div>
-                    </div>
-                `).join('')}
-                ${chatMessages.length === 0 ? '<div class="global-chat-msg system-msg">Пока нет сообщений.</div>' : ''}
+                ${data.chat.map(msg => `<div class="global-chat-msg ${msg.system?'system-msg':''}"><span class="sender">${msg.username}</span><span class="time">${msg.timestamp||''}</span><div>${msg.text}</div></div>`).join('')}
+                ${data.chat.length===0?'<div class="global-chat-msg system-msg">Пока нет сообщений.</div>':''}
             </div>
             ${currentUser.username ? `
             <div class="global-chat-input">
@@ -755,14 +763,15 @@ function renderGlobalChat() {
     const chatDiv = document.getElementById('globalChatMessages');
     if (chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight;
 }
-function sendGlobalMessage() {
+async function sendGlobalMessage() {
     if (!currentUser.username) { alert('Войдите'); showPage('login'); return; }
     const input = document.getElementById('globalChatInput');
     if (!input) return;
     const text = input.value.trim();
     if (!text) return;
-    chatMessages.push({ username: currentUser.username, text, timestamp: new Date().toLocaleString(), system: false });
-    saveChat();
+    await loadData();
+    data.chat.push({ username: currentUser.username, text, timestamp: new Date().toLocaleString(), system: false });
+    await saveData();
     input.value = '';
     renderGlobalChat();
 }
@@ -778,9 +787,8 @@ function renderRules() {
 }
 
 // ================================================================
-// ИГРЫ (КРЕСТИКИ-НОЛИКИ, САПЁР, СТРАТЕГИЯ, PAINT, ЗАКЛАДЧИК)
+// ИГРЫ (ПОЛНЫЙ НАБОР)
 // ================================================================
-// ---- Игровой центр ----
 function renderGameHub() {
     document.getElementById('pageContent').innerHTML = `
         <div class="game-hub"><h2>🎮 Игровой центр</h2>
@@ -790,24 +798,21 @@ function renderGameHub() {
             <div class="game-card" onclick="showPage('game','village')"><span class="icon">🏡</span><h3>Построй деревню</h3></div>
             <div class="game-card" onclick="showPage('game','paint')"><span class="icon">🎨</span><h3>Paint</h3></div>
             <div class="game-card" onclick="showPage('game','runner')"><span class="icon">🏃</span><h3>Закладчик</h3></div>
+            <div class="game-card" onclick="showPage('game','battleship')"><span class="icon">⚓</span><h3>Морская битва</h3></div>
         </div></div>
     `;
 }
 
-// ---- Крестики-нолики (без изменений) ----
+// ---- Крестики-нолики (полная реализация) ----
 let ticState = { board: ['','','','','','','','',''], currentPlayer:'X', gameOver:false, mode:'friend', score:{X:0,O:0,draw:0}, botTimeout:null };
 function renderTicTacToe() {
-    if (ticState.gameOver) {
-        ticState.board = ['','','','','','','','',''];
-        ticState.currentPlayer = 'X';
-        ticState.gameOver = false;
-    }
+    if (ticState.gameOver) { ticState.board = ['','','','','','','','','']; ticState.currentPlayer = 'X'; ticState.gameOver = false; }
     const html = `
         <div class="game-container">
             <h2>❌⭕ Крестики-нолики</h2>
             <div class="game-mode-selector">
-                <button class="btn btn-secondary ${ticState.mode === 'friend' ? 'active' : ''}" onclick="setTicMode('friend')">👥 С другом</button>
-                <button class="btn btn-secondary ${ticState.mode === 'bot' ? 'active' : ''}" onclick="setTicMode('bot')">🤖 С ботом</button>
+                <button class="btn btn-secondary ${ticState.mode==='friend'?'active':''}" onclick="setTicMode('friend')">👥 С другом</button>
+                <button class="btn btn-secondary ${ticState.mode==='bot'?'active':''}" onclick="setTicMode('bot')">🤖 С ботом</button>
             </div>
             <div class="game-status" id="ticStatus"></div>
             <div class="game-board" id="ticBoard"></div>
@@ -825,7 +830,7 @@ function renderTicTacToe() {
     `;
     document.getElementById('pageContent').innerHTML = html;
     renderTicBoard();
-    if (ticState.mode === 'bot' && ticState.currentPlayer === 'O' && !ticState.gameOver) {
+    if (ticState.mode==='bot' && ticState.currentPlayer==='O' && !ticState.gameOver) {
         if (ticState.botTimeout) clearTimeout(ticState.botTimeout);
         ticState.botTimeout = setTimeout(() => ticBotMove(), 300);
     }
@@ -840,9 +845,7 @@ function renderTicBoard() {
         cellDiv.className = `game-cell ${cell ? 'taken ' + cell.toLowerCase() : ''}`;
         cellDiv.textContent = cell;
         cellDiv.dataset.index = index;
-        if (!cell && !ticState.gameOver) {
-            cellDiv.addEventListener('click', () => ticHandleClick(index));
-        }
+        if (!cell && !ticState.gameOver) cellDiv.addEventListener('click', () => ticHandleClick(index));
         boardEl.appendChild(cellDiv);
     });
     const statusEl = document.getElementById('ticStatus');
@@ -871,17 +874,8 @@ function ticMakeMove(index) {
     ticState.board[index] = ticState.currentPlayer;
     renderTicBoard();
     const winner = ticCheckWinner();
-    if (winner) {
-        ticState.gameOver = true;
-        ticState.score[winner]++;
-        renderTicBoard();
-        return;
-    } else if (ticState.board.every(c => c !== '')) {
-        ticState.gameOver = true;
-        ticState.score.draw++;
-        renderTicBoard();
-        return;
-    }
+    if (winner) { ticState.gameOver = true; ticState.score[winner]++; renderTicBoard(); return; }
+    else if (ticState.board.every(c => c !== '')) { ticState.gameOver = true; ticState.score.draw++; renderTicBoard(); return; }
     ticState.currentPlayer = (ticState.currentPlayer === 'X' ? 'O' : 'X');
     renderTicBoard();
     if (ticState.mode === 'bot' && ticState.currentPlayer === 'O' && !ticState.gameOver) {
@@ -892,10 +886,7 @@ function ticMakeMove(index) {
 function ticBotMove() {
     if (ticState.gameOver) return;
     if (ticState.currentPlayer !== 'O') return;
-    const empty = ticState.board.reduce((acc, cell, idx) => {
-        if (cell === '') acc.push(idx);
-        return acc;
-    }, []);
+    const empty = ticState.board.reduce((acc, cell, idx) => { if (cell === '') acc.push(idx); return acc; }, []);
     if (empty.length === 0) return;
     const randomIndex = empty[Math.floor(Math.random() * empty.length)];
     ticMakeMove(randomIndex);
@@ -905,9 +896,7 @@ function ticCheckWinner() {
     const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
     for (let line of lines) {
         const [a,b,c] = line;
-        if (ticState.board[a] && ticState.board[a] === ticState.board[b] && ticState.board[a] === ticState.board[c]) {
-            return ticState.board[a];
-        }
+        if (ticState.board[a] && ticState.board[a] === ticState.board[b] && ticState.board[a] === ticState.board[c]) return ticState.board[a];
     }
     return null;
 }
@@ -922,12 +911,9 @@ function resetTicGame() {
         ticState.botTimeout = setTimeout(() => ticBotMove(), 300);
     }
 }
-function resetTicScore() {
-    ticState.score = { X: 0, O: 0, draw: 0 };
-    resetTicGame();
-}
+function resetTicScore() { ticState.score = { X:0, O:0, draw:0 }; resetTicGame(); }
 
-// ---- Сапёр (без изменений) ----
+// ---- Сапёр ----
 let mineState = { rows:9, cols:9, mines:10, board:[], revealed:[], flagged:[], gameOver:false, firstClick:true, timer:0, timerInterval:null, flagMode:false };
 function initMinesweeper() {
     const rows = mineState.rows, cols = mineState.cols, mines = mineState.mines;
@@ -972,49 +958,35 @@ function renderMinesweeper() {
             <div class="minesweeper-header">
                 <span>💣 ${mineState.mines}</span>
                 <span>⏱️ ${mineState.timer}</span>
-                <div>
-                    <button class="btn btn-secondary" onclick="toggleMineFlagMode()" style="padding:4px 12px;font-size:13px;">
-                        ${mineState.flagMode ? '🚩 Режим флага' : '🟦 Режим открытия'}
-                    </button>
-                </div>
+                <div><button class="btn btn-secondary" onclick="toggleMineFlagMode()" style="padding:4px 12px;font-size:13px;">${mineState.flagMode ? '🚩 Режим флага' : '🟦 Режим открытия'}</button></div>
             </div>
-            <div class="minesweeper-board" style="grid-template-columns: repeat(${cols}, 1fr); max-width: ${Math.min(400, cols*40)}px;">
-    `;
+            <div class="minesweeper-board" style="grid-template-columns: repeat(${cols}, 1fr); max-width: ${Math.min(400, cols*40)}px;">`;
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const cell = mineState.board[r][c];
             const revealed = mineState.revealed[r][c];
             const flagged = mineState.flagged[r][c];
-            let content = '';
-            let classes = 'minesweeper-cell';
+            let content = '', classes = 'minesweeper-cell';
             if (revealed) {
                 classes += ' revealed';
                 if (cell === -1) content = '💣';
                 else if (cell > 0) content = cell;
                 else content = '';
                 if (mineState.gameOver && cell === -1 && !mineState.flagged[r][c]) classes += ' mine-exploded';
-            } else if (flagged) {
-                classes += ' flagged';
-                content = '🚩';
-            }
+            } else if (flagged) { classes += ' flagged'; content = '🚩'; }
             boardHtml += `<div class="${classes}" data-r="${r}" data-c="${c}" data-value="${cell}" onclick="mineCellClick(${r},${c})" oncontextmenu="mineRightClick(event,${r},${c})">${content}</div>`;
         }
     }
-    boardHtml += `
-            </div>
+    boardHtml += `</div>
             <div style="margin-top:15px;">
                 <button class="btn btn-secondary" onclick="initMinesweeper()">🔄 Новая игра</button>
                 <button class="btn btn-secondary" onclick="showPage('game')">← Назад</button>
             </div>
             ${mineState.gameOver ? `<div style="margin-top:10px;font-size:20px;font-weight:600;color:#f44336;">${mineState.gameOver === 'win' ? '🎉 Победа!' : '💥 Поражение!'}</div>` : ''}
-        </div>
-    `;
+        </div>`;
     document.getElementById('pageContent').innerHTML = boardHtml;
 }
-function toggleMineFlagMode() {
-    mineState.flagMode = !mineState.flagMode;
-    renderMinesweeper();
-}
+function toggleMineFlagMode() { mineState.flagMode = !mineState.flagMode; renderMinesweeper(); }
 function mineCellClick(row, col) {
     if (mineState.gameOver) return;
     if (mineState.flagged[row][col]) return;
@@ -1022,37 +994,19 @@ function mineCellClick(row, col) {
     if (mineState.firstClick) {
         placeMines(row, col);
         mineState.firstClick = false;
-        mineState.timerInterval = setInterval(() => {
-            mineState.timer++;
-            document.querySelector('.minesweeper-header span:nth-child(2)').textContent = '⏱️ ' + mineState.timer;
-        }, 1000);
+        mineState.timerInterval = setInterval(() => { mineState.timer++; document.querySelector('.minesweeper-header span:nth-child(2)').textContent = '⏱️ ' + mineState.timer; }, 1000);
     }
-    if (mineState.flagMode) {
-        mineState.flagged[row][col] = !mineState.flagged[row][col];
-        renderMinesweeper();
-        return;
-    }
+    if (mineState.flagMode) { mineState.flagged[row][col] = !mineState.flagged[row][col]; renderMinesweeper(); return; }
     revealCell(row, col);
     renderMinesweeper();
     checkWin();
 }
-function mineRightClick(e, row, col) {
-    e.preventDefault();
-    if (mineState.gameOver) return;
-    if (mineState.revealed[row][col]) return;
-    mineState.flagged[row][col] = !mineState.flagged[row][col];
-    renderMinesweeper();
-}
+function mineRightClick(e, row, col) { e.preventDefault(); if (mineState.gameOver) return; if (mineState.revealed[row][col]) return; mineState.flagged[row][col] = !mineState.flagged[row][col]; renderMinesweeper(); }
 function revealCell(row, col) {
     if (row < 0 || row >= mineState.rows || col < 0 || col >= mineState.cols) return;
     if (mineState.revealed[row][col]) return;
     if (mineState.flagged[row][col]) return;
-    if (mineState.board[row][col] === -1) {
-        mineState.gameOver = 'lose';
-        if (mineState.timerInterval) clearInterval(mineState.timerInterval);
-        mineState.timerInterval = null;
-        return;
-    }
+    if (mineState.board[row][col] === -1) { mineState.gameOver = 'lose'; if (mineState.timerInterval) clearInterval(mineState.timerInterval); mineState.timerInterval = null; return; }
     mineState.revealed[row][col] = true;
     if (mineState.board[row][col] === 0) {
         for (let dr = -1; dr <= 1; dr++) {
@@ -1067,100 +1021,66 @@ function checkWin() {
     let allRevealed = true;
     for (let r = 0; r < mineState.rows; r++) {
         for (let c = 0; c < mineState.cols; c++) {
-            if (mineState.board[r][c] !== -1 && !mineState.revealed[r][c]) {
-                allRevealed = false;
-                break;
-            }
+            if (mineState.board[r][c] !== -1 && !mineState.revealed[r][c]) { allRevealed = false; break; }
         }
         if (!allRevealed) break;
     }
-    if (allRevealed) {
-        mineState.gameOver = 'win';
-        if (mineState.timerInterval) clearInterval(mineState.timerInterval);
-        mineState.timerInterval = null;
-        renderMinesweeper();
-    }
+    if (allRevealed) { mineState.gameOver = 'win'; if (mineState.timerInterval) clearInterval(mineState.timerInterval); mineState.timerInterval = null; renderMinesweeper(); }
 }
 
-// ---- Стратегия (без изменений) ----
-const RESOURCE_NAMES = {
-    wood: 'Древесина', stone: 'Камень', food: 'Еда', gold: 'Золото',
-    iron: 'Железо', crystal: 'Кристаллы', mana: 'Мана',
-    energy: 'Энергия', magic: 'Магия'
-};
-const RESOURCE_EMOJI = {
-    wood: '🌲', stone: '🪨', food: '🌾', gold: '🪙',
-    iron: '⛏️', crystal: '💎', mana: '✨',
-    energy: '⚡', magic: '🔮'
-};
+// ---- Стратегия (упрощённо) ----
+const RESOURCE_NAMES = { wood:'Древесина', stone:'Камень', food:'Еда', gold:'Золото', iron:'Железо', crystal:'Кристаллы', mana:'Мана', energy:'Энергия', magic:'Магия' };
+const RESOURCE_EMOJI = { wood:'🌲', stone:'🪨', food:'🌾', gold:'🪙', iron:'⛏️', crystal:'💎', mana:'✨', energy:'⚡', magic:'🔮' };
 const BUILDING_TEMPLATES = {
-    house: { name: 'Дом', cost: { wood: 5, stone: 3 }, effect: { population: 2 }, emoji: '🏠' },
-    farm: { name: 'Ферма', cost: { wood: 8, stone: 3 }, effect: { food: 2 }, emoji: '🌾' },
-    lumbermill: { name: 'Лесопилка', cost: { wood: 10, stone: 5 }, effect: { wood: 2 }, emoji: '🪵' },
-    quarry: { name: 'Каменоломня', cost: { wood: 12, stone: 8 }, effect: { stone: 2 }, emoji: '⛏️' },
-    market: { name: 'Рынок', cost: { wood: 15, stone: 10, gold: 5 }, effect: { gold: 2 }, emoji: '🏪' },
-    mine: { name: 'Шахта', cost: { wood: 15, stone: 10 }, effect: { iron: 2, gold: 1 }, emoji: '⛰️' },
-    tavern: { name: 'Таверна', cost: { wood: 12, stone: 8, gold: 5 }, effect: { gold: 3 }, emoji: '🍺' },
-    temple: { name: 'Храм', cost: { wood: 20, stone: 15, gold: 10 }, effect: { food: 3, gold: 2 }, emoji: '⛪' },
-    forge: { name: 'Кузница', cost: { wood: 18, stone: 12, iron: 5 }, effect: { iron: 3 }, emoji: '🔨' },
-    laboratory: { name: 'Лаборатория', cost: { wood: 25, stone: 20, gold: 15, crystal: 5 }, effect: { mana: 2, crystal: 1 }, emoji: '🧪' },
-    wall: { name: 'Стена', cost: { stone: 20, iron: 10 }, effect: { defense: 1 }, emoji: '🧱' },
-    tower: { name: 'Башня', cost: { stone: 25, iron: 15, gold: 10 }, effect: { attack: 1 }, emoji: '🗼' },
-    church: { name: 'Церковь', cost: { wood: 30, stone: 20, gold: 20, mana: 5 }, effect: { mana: 3, gold: 2 }, emoji: '⛪' },
-    bank: { name: 'Банк', cost: { gold: 30, stone: 15, iron: 10 }, effect: { gold: 4 }, emoji: '🏦' },
-    school: { name: 'Школа', cost: { wood: 20, stone: 15, gold: 10 }, effect: { knowledge: 1 }, emoji: '📚' },
-    hospital: { name: 'Больница', cost: { wood: 22, stone: 18, gold: 12 }, effect: { health: 1 }, emoji: '🏥' },
-    barracks: { name: 'Казарма', cost: { wood: 28, stone: 22, iron: 12 }, effect: { military: 1 }, emoji: '⚔️' },
-    port: { name: 'Порт', cost: { wood: 35, stone: 25, gold: 15 }, effect: { trade: 1 }, emoji: '⚓' },
-    lighthouse: { name: 'Маяк', cost: { stone: 30, crystal: 10, mana: 5 }, effect: { navigation: 1 }, emoji: '🔦' },
-    alchemy: { name: 'Алхимическая лаборатория', cost: { wood: 40, stone: 30, gold: 20, crystal: 15, mana: 10 }, effect: { mana: 4, crystal: 2 }, emoji: '⚗️' },
-    powerplant: { name: 'Электростанция', cost: { wood: 25, stone: 20, energy: 10 }, effect: { energy: 3 }, emoji: '🏭' },
-    mage_tower: { name: 'Башня магов', cost: { stone: 30, crystal: 10, mana: 15 }, effect: { magic: 3, mana: 2 }, emoji: '🧙' },
-    farm_advanced: { name: 'Продвинутая ферма', cost: { wood: 18, stone: 12, food: 10 }, effect: { food: 5 }, emoji: '🌽' },
-    mine_deep: { name: 'Глубокая шахта', cost: { wood: 22, stone: 20, iron: 8 }, effect: { iron: 4, gold: 2 }, emoji: '⛏️' },
-    crystal_mine: { name: 'Кристальная шахта', cost: { wood: 30, stone: 25, crystal: 5 }, effect: { crystal: 3, mana: 1 }, emoji: '💎' },
-    energy_plant: { name: 'Энергетический завод', cost: { stone: 35, iron: 15, energy: 5 }, effect: { energy: 5, gold: 1 }, emoji: '⚡' },
-    magic_forge: { name: 'Магическая кузница', cost: { wood: 28, iron: 12, mana: 10 }, effect: { magic: 2, iron: 2 }, emoji: '🔮' },
-    trading_post: { name: 'Торговый пост', cost: { wood: 20, stone: 15, gold: 8 }, effect: { gold: 5, trade: 1 }, emoji: '🏪' }
+    house:{name:'Дом',cost:{wood:5,stone:3},effect:{population:2},emoji:'🏠'},
+    farm:{name:'Ферма',cost:{wood:8,stone:3},effect:{food:2},emoji:'🌾'},
+    lumbermill:{name:'Лесопилка',cost:{wood:10,stone:5},effect:{wood:2},emoji:'🪵'},
+    quarry:{name:'Каменоломня',cost:{wood:12,stone:8},effect:{stone:2},emoji:'⛏️'},
+    market:{name:'Рынок',cost:{wood:15,stone:10,gold:5},effect:{gold:2},emoji:'🏪'},
+    mine:{name:'Шахта',cost:{wood:15,stone:10},effect:{iron:2,gold:1},emoji:'⛰️'},
+    tavern:{name:'Таверна',cost:{wood:12,stone:8,gold:5},effect:{gold:3},emoji:'🍺'},
+    temple:{name:'Храм',cost:{wood:20,stone:15,gold:10},effect:{food:3,gold:2},emoji:'⛪'},
+    forge:{name:'Кузница',cost:{wood:18,stone:12,iron:5},effect:{iron:3},emoji:'🔨'},
+    laboratory:{name:'Лаборатория',cost:{wood:25,stone:20,gold:15,crystal:5},effect:{mana:2,crystal:1},emoji:'🧪'},
+    wall:{name:'Стена',cost:{stone:20,iron:10},effect:{defense:1},emoji:'🧱'},
+    tower:{name:'Башня',cost:{stone:25,iron:15,gold:10},effect:{attack:1},emoji:'🗼'},
+    church:{name:'Церковь',cost:{wood:30,stone:20,gold:20,mana:5},effect:{mana:3,gold:2},emoji:'⛪'},
+    bank:{name:'Банк',cost:{gold:30,stone:15,iron:10},effect:{gold:4},emoji:'🏦'},
+    school:{name:'Школа',cost:{wood:20,stone:15,gold:10},effect:{knowledge:1},emoji:'📚'},
+    hospital:{name:'Больница',cost:{wood:22,stone:18,gold:12},effect:{health:1},emoji:'🏥'},
+    barracks:{name:'Казарма',cost:{wood:28,stone:22,iron:12},effect:{military:1},emoji:'⚔️'},
+    port:{name:'Порт',cost:{wood:35,stone:25,gold:15},effect:{trade:1},emoji:'⚓'},
+    lighthouse:{name:'Маяк',cost:{stone:30,crystal:10,mana:5},effect:{navigation:1},emoji:'🔦'},
+    alchemy:{name:'Алхимическая лаборатория',cost:{wood:40,stone:30,gold:20,crystal:15,mana:10},effect:{mana:4,crystal:2},emoji:'⚗️'},
+    powerplant:{name:'Электростанция',cost:{wood:25,stone:20,energy:10},effect:{energy:3},emoji:'🏭'},
+    mage_tower:{name:'Башня магов',cost:{stone:30,crystal:10,mana:15},effect:{magic:3,mana:2},emoji:'🧙'},
+    farm_advanced:{name:'Продвинутая ферма',cost:{wood:18,stone:12,food:10},effect:{food:5},emoji:'🌽'},
+    mine_deep:{name:'Глубокая шахта',cost:{wood:22,stone:20,iron:8},effect:{iron:4,gold:2},emoji:'⛏️'},
+    crystal_mine:{name:'Кристальная шахта',cost:{wood:30,stone:25,crystal:5},effect:{crystal:3,mana:1},emoji:'💎'},
+    energy_plant:{name:'Энергетический завод',cost:{stone:35,iron:15,energy:5},effect:{energy:5,gold:1},emoji:'⚡'},
+    magic_forge:{name:'Магическая кузница',cost:{wood:28,iron:12,mana:10},effect:{magic:2,iron:2},emoji:'🔮'},
+    trading_post:{name:'Торговый пост',cost:{wood:20,stone:15,gold:8},effect:{gold:5,trade:1},emoji:'🏪'}
 };
 let villageState = JSON.parse(localStorage.getItem('villageState')) || {
-    resources: { wood: 100, stone: 100, food: 100, gold: 100, iron: 100, crystal: 100, mana: 100, energy: 100, magic: 100 },
-    buildings: Object.keys(BUILDING_TEMPLATES).reduce((a, k) => {
-        a[k] = { count: k === 'house' ? 1 : 0 };
-        return a;
-    }, {}),
-    population: 1,
-    maxPopulation: 2,
-    totalBuilds: 1,
-    achievements: [],
-    lastTick: Date.now()
+    resources: { wood:100, stone:100, food:100, gold:100, iron:100, crystal:100, mana:100, energy:100, magic:100 },
+    buildings: Object.keys(BUILDING_TEMPLATES).reduce((a,k)=>{ a[k]={count:k==='house'?1:0}; return a; }, {}),
+    population:1, maxPopulation:2, totalBuilds:1, achievements:[], lastTick:Date.now()
 };
 function saveVillage() { localStorage.setItem('villageState', JSON.stringify(villageState)); }
 function ensureVillageState() {
-    for (let res of ['energy', 'magic']) {
-        if (villageState.resources[res] === undefined) villageState.resources[res] = 100;
-    }
-    for (let key of Object.keys(BUILDING_TEMPLATES)) {
-        if (!villageState.buildings[key]) {
-            villageState.buildings[key] = { count: key === 'house' ? 1 : 0 };
-        }
-    }
+    for (let res of ['energy','magic']) if (villageState.resources[res]===undefined) villageState.resources[res]=100;
+    for (let key of Object.keys(BUILDING_TEMPLATES)) if (!villageState.buildings[key]) villageState.buildings[key]={count:key==='house'?1:0};
     saveVillage();
 }
 function renderVillageBuilder() {
     ensureVillageState();
-    const r = villageState.resources;
-    const buildings = villageState.buildings;
-    const pop = villageState.population;
-    const maxPop = villageState.maxPopulation;
+    const r = villageState.resources, buildings = villageState.buildings, pop = villageState.population, maxPop = villageState.maxPopulation;
     let html = `
         <h2 style="text-align:center;font-size:28px;margin-bottom:20px;">🏡 Построй деревню</h2>
         <div class="village-container">
             <div class="village-resources">
                 <h3>📦 Ресурсы (9)</h3>
-                ${Object.keys(r).map(key => `
-                    <div class="res-item"><span>${RESOURCE_EMOJI[key]} ${RESOURCE_NAMES[key]}</span><span>${Math.floor(r[key])}</span></div>
-                `).join('')}
+                ${Object.keys(r).map(key => `<div class="res-item"><span>${RESOURCE_EMOJI[key]} ${RESOURCE_NAMES[key]}</span><span>${Math.floor(r[key])}</span></div>`).join('')}
                 <div style="margin-top:10px;border-top:1px solid #2a2a3a;padding-top:10px;">
                     <div class="res-item"><span>👨‍👩‍👦 Население</span><span>${pop} / ${maxPop}</span></div>
                     <div class="res-item"><span>🏗️ Всего построек</span><span>${villageState.totalBuilds}</span></div>
@@ -1172,7 +1092,7 @@ function renderVillageBuilder() {
                 ${Object.keys(BUILDING_TEMPLATES).map(key => {
                     const template = BUILDING_TEMPLATES[key];
                     const count = buildings[key] ? buildings[key].count : 0;
-                    const costHtml = Object.entries(template.cost).map(([res, val]) => `${RESOURCE_EMOJI[res]}${val}`).join(' ');
+                    const costHtml = Object.entries(template.cost).map(([res,val]) => `${RESOURCE_EMOJI[res]}${val}`).join(' ');
                     return `<div class="building-item">
                         <div class="info"><strong>${template.emoji} ${template.name}</strong> (${count})<br><span style="font-size:12px;color:#888;">Стоимость: ${costHtml}</span></div>
                         <button class="btn btn-success" onclick="buildBuilding('${key}')">Построить</button>
@@ -1223,55 +1143,35 @@ function buildBuilding(type) {
     const cost = template.cost;
     const r = villageState.resources;
     for (let [key, val] of Object.entries(cost)) {
-        if ((r[key] || 0) < val) {
-            alert(`Не хватает ${RESOURCE_NAMES[key]} (нужно ${val})`);
-            return;
-        }
+        if ((r[key] || 0) < val) { alert(`Не хватает ${RESOURCE_NAMES[key]} (нужно ${val})`); return; }
     }
-    for (let [key, val] of Object.entries(cost)) {
-        r[key] -= val;
-    }
+    for (let [key, val] of Object.entries(cost)) { r[key] -= val; }
     if (!villageState.buildings[type]) villageState.buildings[type] = { count: 0 };
     villageState.buildings[type].count++;
     villageState.totalBuilds++;
-    if (type === 'house') {
-        villageState.maxPopulation += 2;
-        villageState.population++;
-    }
+    if (type === 'house') { villageState.maxPopulation += 2; villageState.population++; }
     saveVillage();
     renderVillageBuilder();
 }
 function resetVillage() {
     if (!confirm('Сбросить прогресс деревни?')) return;
     villageState = {
-        resources: { wood: 100, stone: 100, food: 100, gold: 100, iron: 100, crystal: 100, mana: 100, energy: 100, magic: 100 },
-        buildings: Object.keys(BUILDING_TEMPLATES).reduce((a, k) => {
-            a[k] = { count: k === 'house' ? 1 : 0 };
-            return a;
-        }, {}),
-        population: 1,
-        maxPopulation: 2,
-        totalBuilds: 1,
-        achievements: [],
-        lastTick: Date.now()
+        resources: { wood:100, stone:100, food:100, gold:100, iron:100, crystal:100, mana:100, energy:100, magic:100 },
+        buildings: Object.keys(BUILDING_TEMPLATES).reduce((a,k)=>{ a[k]={count:k==='house'?1:0}; return a; }, {}),
+        population:1, maxPopulation:2, totalBuilds:1, achievements:[], lastTick:Date.now()
     };
     saveVillage();
-    if (window.villageInterval) {
-        clearInterval(window.villageInterval);
-        window.villageInterval = null;
-    }
+    if (window.villageInterval) { clearInterval(window.villageInterval); window.villageInterval = null; }
     renderVillageBuilder();
 }
 
-// ---- Paint (без изменений) ----
+// ---- Paint ----
 let paintCanvas, paintCtx, painting = false, paintColor = '#000000', paintBrushSize = 5;
 function renderPaint() {
     const html = `
         <div class="paint-container">
             <h2>🎨 Paint</h2>
-            <div class="paint-canvas-wrapper">
-                <canvas id="paintCanvas" width="400" height="400"></canvas>
-            </div>
+            <div class="paint-canvas-wrapper"><canvas id="paintCanvas" width="400" height="400"></canvas></div>
             <div class="paint-tools">
                 <button class="active" data-color="#000000" onclick="setPaintColor('#000000', this)">⚫ Чёрный</button>
                 <button data-color="#ff0000" onclick="setPaintColor('#ff0000', this)">🔴 Красный</button>
@@ -1295,55 +1195,15 @@ function renderPaint() {
     paintCanvas.addEventListener('mousemove', drawPaint);
     paintCanvas.addEventListener('mouseup', endPaint);
     paintCanvas.addEventListener('mouseleave', endPaint);
-    paintCanvas.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        const t = e.touches[0];
-        const rect = paintCanvas.getBoundingClientRect();
-        const x = (t.clientX - rect.left) * (400 / rect.width);
-        const y = (t.clientY - rect.top) * (400 / rect.height);
-        startPaint({ clientX: x, clientY: y });
-    });
-    paintCanvas.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        const t = e.touches[0];
-        const rect = paintCanvas.getBoundingClientRect();
-        const x = (t.clientX - rect.left) * (400 / rect.width);
-        const y = (t.clientY - rect.top) * (400 / rect.height);
-        drawPaint({ clientX: x, clientY: y });
-    });
+    paintCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); const t = e.touches[0]; const rect = paintCanvas.getBoundingClientRect(); const x = (t.clientX - rect.left) * (400 / rect.width); const y = (t.clientY - rect.top) * (400 / rect.height); startPaint({ clientX: x, clientY: y }); });
+    paintCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); const t = e.touches[0]; const rect = paintCanvas.getBoundingClientRect(); const x = (t.clientX - rect.left) * (400 / rect.width); const y = (t.clientY - rect.top) * (400 / rect.height); drawPaint({ clientX: x, clientY: y }); });
     paintCanvas.addEventListener('touchend', endPaint);
     document.querySelector('.paint-tools .active')?.classList.add('active');
 }
-function setPaintColor(color, btn) {
-    paintColor = color;
-    document.querySelectorAll('.paint-tools button').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-}
-function clearPaint() {
-    paintCtx.fillStyle = 'white';
-    paintCtx.fillRect(0, 0, 400, 400);
-    document.getElementById('paintResult').innerHTML = 'Холст очищен';
-}
-function startPaint(e) {
-    painting = true;
-    const rect = paintCanvas.getBoundingClientRect();
-    const x = e.clientX ? (e.clientX - rect.left) * (400 / rect.width) : e.clientX;
-    const y = e.clientY ? (e.clientY - rect.top) * (400 / rect.height) : e.clientY;
-    paintCtx.beginPath();
-    paintCtx.arc(x, y, paintBrushSize / 2, 0, Math.PI * 2);
-    paintCtx.fillStyle = paintColor;
-    paintCtx.fill();
-}
-function drawPaint(e) {
-    if (!painting) return;
-    const rect = paintCanvas.getBoundingClientRect();
-    const x = e.clientX ? (e.clientX - rect.left) * (400 / rect.width) : e.clientX;
-    const y = e.clientY ? (e.clientY - rect.top) * (400 / rect.height) : e.clientY;
-    paintCtx.fillStyle = paintColor;
-    paintCtx.beginPath();
-    paintCtx.arc(x, y, paintBrushSize / 2, 0, Math.PI * 2);
-    paintCtx.fill();
-}
+function setPaintColor(color, btn) { paintColor = color; document.querySelectorAll('.paint-tools button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); }
+function clearPaint() { paintCtx.fillStyle = 'white'; paintCtx.fillRect(0,0,400,400); document.getElementById('paintResult').innerHTML = 'Холст очищен'; }
+function startPaint(e) { painting = true; const rect = paintCanvas.getBoundingClientRect(); const x = e.clientX ? (e.clientX - rect.left) * (400/rect.width) : e.clientX; const y = e.clientY ? (e.clientY - rect.top) * (400/rect.height) : e.clientY; paintCtx.beginPath(); paintCtx.arc(x,y,paintBrushSize/2,0,Math.PI*2); paintCtx.fillStyle = paintColor; paintCtx.fill(); }
+function drawPaint(e) { if (!painting) return; const rect = paintCanvas.getBoundingClientRect(); const x = e.clientX ? (e.clientX - rect.left) * (400/rect.width) : e.clientX; const y = e.clientY ? (e.clientY - rect.top) * (400/rect.height) : e.clientY; paintCtx.fillStyle = paintColor; paintCtx.beginPath(); paintCtx.arc(x,y,paintBrushSize/2,0,Math.PI*2); paintCtx.fill(); }
 function endPaint() { painting = false; }
 async function guessPaint() {
     const resultDiv = document.getElementById('paintResult');
@@ -1364,16 +1224,15 @@ async function guessPaint() {
         }
     } catch (e) {
         console.error(e);
-        const words = ['кот', 'собака', 'дом', 'дерево', 'цветок', 'машина', 'солнце', 'облако', 'рыба', 'птица', 'человек', 'сердце', 'звезда', 'луна'];
+        const words = ['кот','собака','дом','дерево','цветок','машина','солнце','облако','рыба','птица','человек','сердце','звезда','луна'];
         const randomWord = words[Math.floor(Math.random() * words.length)];
         resultDiv.innerHTML = `🎨 (Демо) AI предполагает, что это: <span class="result">${randomWord}</span> (в реальном режиме нужен доступ к API)`;
     }
 }
 
-// ---- Закладчик (ИСПРАВЛЕННЫЙ - управление работает) ----
-let runnerState = { player: { x: 4, y: 4 }, drops: [], cops: [], score: 0, gameOver: false, dropTarget: 5, keys: {} };
+// ---- Закладчик ----
+let runnerState = { player: { x:4, y:4 }, drops:[], cops:[], score:0, gameOver:false, dropTarget:5, keys:{} };
 let runnerInterval = null;
-
 function renderRunnerGame() {
     resetRunnerGame();
     const html = `
@@ -1384,9 +1243,7 @@ function renderRunnerGame() {
                 <span>🎯 Цель: <span id="runnerTarget">${runnerState.dropTarget}</span></span>
                 <span>🚔 Полиция: <span id="runnerCops">${runnerState.cops.length}</span></span>
             </div>
-            <div class="game-canvas-wrapper">
-                <canvas id="runnerCanvas" width="400" height="400"></canvas>
-            </div>
+            <div class="game-canvas-wrapper"><canvas id="runnerCanvas" width="400" height="400"></canvas></div>
             <div style="margin-top:10px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
                 <button class="btn btn-secondary" onclick="resetRunnerGame()">🔄 Новая игра</button>
                 <button class="btn btn-secondary" onclick="showPage('game')">← Назад</button>
@@ -1397,7 +1254,6 @@ function renderRunnerGame() {
     document.getElementById('pageContent').innerHTML = html;
     const canvas = document.getElementById('runnerCanvas');
     const ctx = canvas.getContext('2d');
-    // Убираем старые обработчики, добавляем новые
     document.removeEventListener('keydown', runnerKeyDown);
     document.removeEventListener('keyup', runnerKeyUp);
     document.addEventListener('keydown', runnerKeyDown);
@@ -1406,76 +1262,35 @@ function renderRunnerGame() {
     runnerInterval = setInterval(() => gameLoop(ctx), 150);
     drawCanvas(ctx);
 }
-
 function runnerKeyDown(e) {
     runnerState.keys[e.key] = true;
-    if (e.key === ' ' || e.key === 'Space') {
-        e.preventDefault();
-        if (!runnerState.gameOver) dropPackage();
-    }
+    if (e.key === ' ' || e.key === 'Space') { e.preventDefault(); if (!runnerState.gameOver) dropPackage(); }
 }
-function runnerKeyUp(e) {
-    runnerState.keys[e.key] = false;
-}
-
+function runnerKeyUp(e) { runnerState.keys[e.key] = false; }
 function resetRunnerGame() {
-    runnerState = {
-        player: { x: 4, y: 4 },
-        drops: [],
-        cops: [],
-        score: 0,
-        gameOver: false,
-        dropTarget: 5,
-        keys: {}
-    };
-    for (let i = 0; i < 3; i++) {
-        let pos;
-        do {
-            pos = { x: Math.floor(Math.random() * 9), y: Math.floor(Math.random() * 9) };
-        } while (pos.x === runnerState.player.x && pos.y === runnerState.player.y);
-        runnerState.drops.push({ x: pos.x, y: pos.y, active: true });
-    }
-    for (let i = 0; i < 2; i++) {
-        let pos;
-        do {
-            pos = { x: Math.floor(Math.random() * 9), y: Math.floor(Math.random() * 9) };
-        } while (pos.x === runnerState.player.x && pos.y === runnerState.player.y);
-        runnerState.cops.push({ x: pos.x, y: pos.y });
-    }
+    runnerState = { player: { x:4, y:4 }, drops:[], cops:[], score:0, gameOver:false, dropTarget:5, keys:{} };
+    for (let i=0; i<3; i++) { let pos; do { pos = { x: Math.floor(Math.random()*9), y: Math.floor(Math.random()*9) }; } while (pos.x===runnerState.player.x && pos.y===runnerState.player.y); runnerState.drops.push({ x:pos.x, y:pos.y, active:true }); }
+    for (let i=0; i<2; i++) { let pos; do { pos = { x: Math.floor(Math.random()*9), y: Math.floor(Math.random()*9) }; } while (pos.x===runnerState.player.x && pos.y===runnerState.player.y); runnerState.cops.push({ x:pos.x, y:pos.y }); }
     const msg = document.getElementById('runnerMessage');
     if (msg) msg.textContent = 'Соберите все закладки и избегайте полиции!';
 }
-
 function dropPackage() {
     if (runnerState.gameOver) return;
     const idx = runnerState.drops.findIndex(d => d.x === runnerState.player.x && d.y === runnerState.player.y && d.active);
     if (idx !== -1) {
         runnerState.drops[idx].active = false;
         runnerState.score++;
-        const target = document.getElementById('runnerTarget');
-        if (target) target.textContent = runnerState.dropTarget;
-        const score = document.getElementById('runnerScore');
-        if (score) score.textContent = runnerState.score;
-        if (runnerState.score >= runnerState.dropTarget) {
-            runnerState.gameOver = true;
-            const msg = document.getElementById('runnerMessage');
-            if (msg) msg.textContent = '🎉 Победа!';
-        }
+        document.getElementById('runnerTarget').textContent = runnerState.dropTarget;
+        document.getElementById('runnerScore').textContent = runnerState.score;
+        if (runnerState.score >= runnerState.dropTarget) { runnerState.gameOver = true; const msg = document.getElementById('runnerMessage'); if (msg) msg.textContent = '🎉 Победа!'; }
         if (!runnerState.gameOver) {
-            let pos;
-            let attempts = 0;
-            do {
-                pos = { x: Math.floor(Math.random() * 9), y: Math.floor(Math.random() * 9) };
-                attempts++;
-            } while ((pos.x === runnerState.player.x && pos.y === runnerState.player.y) ||
-                     runnerState.drops.some(d => d.x === pos.x && d.y === pos.y && d.active) &&
-                     attempts < 50);
-            runnerState.drops.push({ x: pos.x, y: pos.y, active: true });
+            let pos, attempts=0;
+            do { pos = { x: Math.floor(Math.random()*9), y: Math.floor(Math.random()*9) }; attempts++; } while ((pos.x===runnerState.player.x && pos.y===runnerState.player.y) || runnerState.drops.some(d => d.x===pos.x && d.y===pos.y && d.active) && attempts<50);
+            runnerState.drops.push({ x:pos.x, y:pos.y, active:true });
         }
         if (runnerState.score % 3 === 0 && runnerState.cops.length < 5) {
-            runnerState.cops.push({ x: Math.floor(Math.random() * 9), y: Math.floor(Math.random() * 9) });
-            const copsSpan = document.getElementById('runnerCops');
-            if (copsSpan) copsSpan.textContent = runnerState.cops.length;
+            runnerState.cops.push({ x: Math.floor(Math.random()*9), y: Math.floor(Math.random()*9) });
+            document.getElementById('runnerCops').textContent = runnerState.cops.length;
         }
     } else {
         const msg = document.getElementById('runnerMessage');
@@ -1483,67 +1298,45 @@ function dropPackage() {
         setTimeout(() => { if (msg) msg.textContent = ''; }, 1000);
     }
 }
-
 function gameLoop(ctx) {
     if (runnerState.gameOver) return;
     const p = runnerState.player;
-    let dx = 0, dy = 0;
+    let dx=0, dy=0;
     if (runnerState.keys['ArrowUp'] || runnerState.keys['w']) dy = -1;
     if (runnerState.keys['ArrowDown'] || runnerState.keys['s']) dy = 1;
     if (runnerState.keys['ArrowLeft'] || runnerState.keys['a']) dx = -1;
     if (runnerState.keys['ArrowRight'] || runnerState.keys['d']) dx = 1;
-    if (dx !== 0 || dy !== 0) {
-        const newX = p.x + dx;
-        const newY = p.y + dy;
-        if (newX >= 0 && newX < 9 && newY >= 0 && newY < 9) {
-            p.x = newX;
-            p.y = newY;
-        }
-    }
-    // Полиция двигается к игроку
+    if (dx !== 0 || dy !== 0) { const newX = p.x + dx; const newY = p.y + dy; if (newX >= 0 && newX < 9 && newY >= 0 && newY < 9) { p.x = newX; p.y = newY; } }
     runnerState.cops.forEach(cop => {
         const dx2 = Math.sign(runnerState.player.x - cop.x);
         const dy2 = Math.sign(runnerState.player.y - cop.y);
         if (Math.random() < 0.6) {
-            if (Math.random() < 0.5) {
-                if (cop.x + dx2 >= 0 && cop.x + dx2 < 9) cop.x += dx2;
-            } else {
-                if (cop.y + dy2 >= 0 && cop.y + dy2 < 9) cop.y += dy2;
-            }
+            if (Math.random() < 0.5) { if (cop.x + dx2 >= 0 && cop.x + dx2 < 9) cop.x += dx2; }
+            else { if (cop.y + dy2 >= 0 && cop.y + dy2 < 9) cop.y += dy2; }
         } else {
             const dirs = [{x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0}];
             const dir = dirs[Math.floor(Math.random() * dirs.length)];
-            const nx = cop.x + dir.x;
-            const ny = cop.y + dir.y;
-            if (nx >= 0 && nx < 9 && ny >= 0 && ny < 9) {
-                cop.x = nx;
-                cop.y = ny;
-            }
+            const nx = cop.x + dir.x, ny = cop.y + dir.y;
+            if (nx >= 0 && nx < 9 && ny >= 0 && ny < 9) { cop.x = nx; cop.y = ny; }
         }
     });
     const hit = runnerState.cops.some(c => c.x === p.x && c.y === p.y);
-    if (hit) {
-        runnerState.gameOver = true;
-        const msg = document.getElementById('runnerMessage');
-        if (msg) msg.textContent = '💀 Вас поймали!';
-        if (runnerInterval) clearInterval(runnerInterval);
-    }
+    if (hit) { runnerState.gameOver = true; const msg = document.getElementById('runnerMessage'); if (msg) msg.textContent = '💀 Вас поймали!'; if (runnerInterval) clearInterval(runnerInterval); }
     drawCanvas(ctx);
 }
-
 function drawCanvas(ctx) {
     const size = 400 / 9;
-    ctx.clearRect(0, 0, 400, 400);
-    for (let i = 0; i < 9; i++) {
-        for (let j = 0; j < 9; j++) {
-            ctx.fillStyle = (i + j) % 2 === 0 ? '#1a1a2a' : '#222244';
-            ctx.fillRect(i * size, j * size, size, size);
+    ctx.clearRect(0,0,400,400);
+    for (let i=0; i<9; i++) {
+        for (let j=0; j<9; j++) {
+            ctx.fillStyle = (i+j)%2===0 ? '#1a1a2a' : '#222244';
+            ctx.fillRect(i*size, j*size, size, size);
             ctx.strokeStyle = '#2a2a3a';
             ctx.lineWidth = 1;
-            ctx.strokeRect(i * size, j * size, size, size);
+            ctx.strokeRect(i*size, j*size, size, size);
         }
     }
-    runnerState.drops.filter(d => d.active).forEach(d => {
+    runnerState.drops.filter(d=>d.active).forEach(d => {
         ctx.fillStyle = '#4caf50';
         ctx.beginPath();
         ctx.arc(d.x * size + size/2, d.y * size + size/2, size * 0.3, 0, Math.PI * 2);
@@ -1582,6 +1375,261 @@ function drawCanvas(ctx) {
     ctx.fillText('Стрелки/WASD - движение, Space - взять закладку', 10, 395);
 }
 
+// ---- Морская битва (новая игра) ----
+let battleState = {
+    playerBoard: [], // 10x10, 0 - вода, 1 - корабль, 2 - ранен, 3 - убит
+    enemyBoard: [],
+    ships: [],
+    enemyShips: [],
+    currentTurn: 'player', // 'player' или 'enemy'
+    gameOver: false,
+    size: 10,
+    shipLengths: [4,3,3,2,2,2,1,1,1,1] // 1 четырехпалубный, 2 трехпалубных, 3 двухпалубных, 4 однопалубных
+};
+function initBattleship() {
+    battleState.playerBoard = Array.from({length:10}, () => Array(10).fill(0));
+    battleState.enemyBoard = Array.from({length:10}, () => Array(10).fill(0));
+    battleState.ships = [];
+    battleState.enemyShips = [];
+    battleState.currentTurn = 'player';
+    battleState.gameOver = false;
+    // Расстановка кораблей игрока (автоматическая)
+    placeShips(battleState.playerBoard, battleState.ships);
+    // Расстановка кораблей противника
+    placeShips(battleState.enemyBoard, battleState.enemyShips);
+}
+function placeShips(board, ships) {
+    const shipLengths = [4,3,3,2,2,2,1,1,1,1];
+    ships.length = 0;
+    for (let len of shipLengths) {
+        let placed = false;
+        let attempts = 0;
+        while (!placed && attempts < 100) {
+            const horizontal = Math.random() < 0.5;
+            const row = Math.floor(Math.random() * 10);
+            const col = Math.floor(Math.random() * 10);
+            if (canPlace(board, row, col, len, horizontal)) {
+                for (let i = 0; i < len; i++) {
+                    if (horizontal) board[row][col + i] = 1;
+                    else board[row + i][col] = 1;
+                }
+                ships.push({ row, col, len, horizontal, hits: 0 });
+                placed = true;
+            }
+            attempts++;
+        }
+        if (!placed) {
+            // Если не удалось разместить, просто пропускаем (но в реальности так не должно быть)
+        }
+    }
+}
+function canPlace(board, row, col, len, horizontal) {
+    for (let i = 0; i < len; i++) {
+        const r = horizontal ? row : row + i;
+        const c = horizontal ? col + i : col;
+        if (r >= 10 || c >= 10) return false;
+        if (board[r][c] !== 0) return false;
+        // Проверка соседей (чтобы корабли не касались)
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                const nr = r + dr, nc = c + dc;
+                if (nr >= 0 && nr < 10 && nc >= 0 && nc < 10 && board[nr][nc] !== 0) return false;
+            }
+        }
+    }
+    return true;
+}
+function renderBattleship() {
+    if (!battleState.playerBoard.length) initBattleship();
+    const html = `
+        <div class="game-container">
+            <h2>⚓ Морская битва</h2>
+            <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:30px;">
+                <div>
+                    <h3>Ваше поле</h3>
+                    <div class="sea-board" id="playerBoard"></div>
+                </div>
+                <div>
+                    <h3>Поле противника</h3>
+                    <div class="sea-board" id="enemyBoard"></div>
+                </div>
+            </div>
+            <div style="margin-top:15px;">
+                <div id="battleStatus" style="font-size:20px; font-weight:600; color:#aaa;"></div>
+                <div style="margin-top:10px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+                    <button class="btn btn-secondary" onclick="resetBattleship()">🔄 Новая игра</button>
+                    <button class="btn btn-secondary" onclick="showPage('game')">← Назад</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('pageContent').innerHTML = html;
+    renderBattleshipBoards();
+}
+function renderBattleshipBoards() {
+    const playerBoardEl = document.getElementById('playerBoard');
+    const enemyBoardEl = document.getElementById('enemyBoard');
+    if (!playerBoardEl || !enemyBoardEl) return;
+    // Игрок
+    playerBoardEl.innerHTML = '';
+    for (let r = 0; r < 10; r++) {
+        for (let c = 0; c < 10; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'sea-cell';
+            const val = battleState.playerBoard[r][c];
+            if (val === 1) cell.classList.add('ship');
+            else if (val === 2) cell.classList.add('hit');
+            else if (val === 3) cell.classList.add('ship-hit');
+            playerBoardEl.appendChild(cell);
+        }
+    }
+    // Противник (скрываем корабли, показываем только выстрелы)
+    enemyBoardEl.innerHTML = '';
+    for (let r = 0; r < 10; r++) {
+        for (let c = 0; c < 10; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'sea-cell enemy';
+            const val = battleState.enemyBoard[r][c];
+            if (val === 2) cell.classList.add('hit');
+            else if (val === 3) cell.classList.add('ship-hit');
+            else if (val === 1) cell.classList.add('ship'); // скрыто, но для отладки можно показать
+            // Если игра не окончена и ход игрока, клик
+            if (!battleState.gameOver && battleState.currentTurn === 'player' && val !== 2 && val !== 3) {
+                cell.style.cursor = 'pointer';
+                cell.addEventListener('click', () => playerFire(r, c));
+            }
+            enemyBoardEl.appendChild(cell);
+        }
+    }
+    updateBattleStatus();
+}
+function updateBattleStatus() {
+    const status = document.getElementById('battleStatus');
+    if (!status) return;
+    if (battleState.gameOver) {
+        const win = battleState.enemyShips.every(s => s.hits === s.len);
+        status.textContent = win ? '🎉 Вы победили!' : '💀 Вы проиграли!';
+        status.style.color = win ? '#4caf50' : '#f44336';
+        return;
+    }
+    const playerShipsAlive = battleState.ships.filter(s => s.hits < s.len).length;
+    const enemyShipsAlive = battleState.enemyShips.filter(s => s.hits < s.len).length;
+    status.textContent = `Ваши корабли: ${playerShipsAlive} | Корабли врага: ${enemyShipsAlive} | Ход: ${battleState.currentTurn === 'player' ? 'Ваш' : 'Противника'}`;
+    status.style.color = '#aaa';
+}
+function playerFire(row, col) {
+    if (battleState.gameOver) return;
+    if (battleState.currentTurn !== 'player') return;
+    const board = battleState.enemyBoard;
+    if (board[row][col] === 2 || board[row][col] === 3) return; // уже стреляли
+    // Выстрел
+    let hit = false;
+    for (let ship of battleState.enemyShips) {
+        const { row: sr, col: sc, len, horizontal } = ship;
+        for (let i = 0; i < len; i++) {
+            const r = horizontal ? sr : sr + i;
+            const c = horizontal ? sc + i : sc;
+            if (r === row && c === col) {
+                ship.hits++;
+                hit = true;
+                if (ship.hits === len) {
+                    // Корабль уничтожен
+                    for (let i = 0; i < len; i++) {
+                        const rr = horizontal ? sr : sr + i;
+                        const cc = horizontal ? sc + i : sc;
+                        board[rr][cc] = 3;
+                    }
+                    // Отмечаем вокруг корабля (для красоты)
+                } else {
+                    board[row][col] = 2;
+                }
+                break;
+            }
+        }
+        if (hit) break;
+    }
+    if (!hit) {
+        board[row][col] = 2; // промах, но в клетке будет отмечено
+        // Проверим, не попали ли в корабль, но мы уже проверили выше
+        // Если не попали, просто отмечаем промах
+        if (board[row][col] !== 2) board[row][col] = 2; // чтобы не затереть
+        // Считаем промахом
+    } else {
+        // Проверим, уничтожен ли корабль
+        if (battleState.enemyShips.some(s => s.hits === s.len)) {
+            // Корабль уничтожен, нужно отметить все клетки вокруг как промахи (можно для красоты)
+        }
+        // Проверим победу
+        if (battleState.enemyShips.every(s => s.hits === s.len)) {
+            battleState.gameOver = true;
+            renderBattleshipBoards();
+            return;
+        }
+    }
+    // Смена хода
+    battleState.currentTurn = 'enemy';
+    renderBattleshipBoards();
+    // Ход врага (с задержкой)
+    setTimeout(() => enemyFire(), 500);
+}
+function enemyFire() {
+    if (battleState.gameOver) return;
+    // Простой ИИ: случайный выстрел по клеткам, где ещё не стреляли
+    const board = battleState.playerBoard;
+    let row, col;
+    let attempts = 0;
+    do {
+        row = Math.floor(Math.random() * 10);
+        col = Math.floor(Math.random() * 10);
+        attempts++;
+    } while ((board[row][col] === 2 || board[row][col] === 3) && attempts < 100);
+    if (attempts >= 100) {
+        // Если все клетки заняты, игра завершена (ничья)
+        battleState.gameOver = true;
+        renderBattleshipBoards();
+        return;
+    }
+    let hit = false;
+    for (let ship of battleState.ships) {
+        const { row: sr, col: sc, len, horizontal } = ship;
+        for (let i = 0; i < len; i++) {
+            const r = horizontal ? sr : sr + i;
+            const c = horizontal ? sc + i : sc;
+            if (r === row && c === col) {
+                ship.hits++;
+                hit = true;
+                if (ship.hits === len) {
+                    for (let i = 0; i < len; i++) {
+                        const rr = horizontal ? sr : sr + i;
+                        const cc = horizontal ? sc + i : sc;
+                        board[rr][cc] = 3;
+                    }
+                } else {
+                    board[row][col] = 2;
+                }
+                break;
+            }
+        }
+        if (hit) break;
+    }
+    if (!hit) {
+        board[row][col] = 2; // промах
+    }
+    // Проверка победы врага
+    if (battleState.ships.every(s => s.hits === s.len)) {
+        battleState.gameOver = true;
+        battleState.currentTurn = 'enemy';
+        renderBattleshipBoards();
+        return;
+    }
+    battleState.currentTurn = 'player';
+    renderBattleshipBoards();
+}
+function resetBattleship() {
+    initBattleship();
+    renderBattleship();
+}
+
 // ================================================================
 // AI (ДЕМО)
 // ================================================================
@@ -1614,18 +1662,10 @@ function sendAIMessage() {
     setTimeout(() => {
         const reply = document.createElement('div');
         reply.className = 'msg assistant';
-        reply.textContent = getDemoResponse(q);
+        reply.textContent = 'Демо-ответ. Для полного AI нужен API-ключ.';
         chat.appendChild(reply);
         chat.scrollTop = chat.scrollHeight;
     }, 500);
-}
-function getDemoResponse(q) {
-    const text = q.toLowerCase();
-    if (text.includes('привет')) return 'Привет!';
-    if (text.includes('как дела')) return 'Отлично!';
-    if (text.includes('товар')) return 'Смотрите каталог.';
-    if (text.includes('игра')) return 'Игры в разделе "Игры".';
-    return 'Хороший вопрос! Попробуйте уточнить.';
 }
 
 // ================================================================
@@ -1657,7 +1697,7 @@ function renderAddProduct() {
             if (checked.length > 2) { this.checked = false; alert('Максимум 2 жанра'); }
         });
     });
-    document.getElementById('addProductForm').addEventListener('submit', function(e) {
+    document.getElementById('addProductForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         const name = document.getElementById('prodName').value.trim();
         const price = parseFloat(document.getElementById('prodPrice').value);
@@ -1669,17 +1709,18 @@ function renderAddProduct() {
         if (selectedGenres.length === 0 || selectedGenres.length > 2) { alert('Выберите 1-2 жанра'); return; }
         const fileInput = document.getElementById('prodImage');
         const reader = new FileReader();
-        reader.onload = function(ev) {
+        reader.onload = async function(ev) {
             const image = ev.target.result || '';
+            await loadData();
             const newProduct = {
-                id: products.length ? Math.max(...products.map(p => p.id)) + 1 : 1,
+                id: data.products.length ? Math.max(...data.products.map(p => p.id)) + 1 : 1,
                 name, price, description: desc, image,
                 sellerId: currentUser.username,
                 status: 'approved', reviews: [],
                 cardNumber: card, genres: selectedGenres
             };
-            products.push(newProduct);
-            saveProducts();
+            data.products.push(newProduct);
+            await saveData();
             alert('Товар опубликован');
             showPage('catalog');
         };
@@ -1692,7 +1733,7 @@ function renderEditProduct(id) {
     showPage('catalog');
 }
 function renderProduct(id) {
-    const prod = products.find(p => p.id === id);
+    const prod = data.products.find(p => p.id === id);
     if (!prod) { document.getElementById('pageContent').innerHTML = '<p>Товар не найден</p>'; return; }
     document.getElementById('pageContent').innerHTML = `
         <h2>${prod.name}</h2>
@@ -1705,7 +1746,7 @@ function renderProduct(id) {
 }
 
 // ================================================================
-// ОНЛАЙН-СТАТУС (имитация)
+// ОНЛАЙН-СТАТУС
 // ================================================================
 function updateOnlineStatus() {
     const dot = document.getElementById('onlineDot');
@@ -1721,23 +1762,24 @@ function updateOnlineStatus() {
 }
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
-document.getElementById('onlineCount').textContent = Math.floor(Math.random() * 5) + 1;
 
 // ================================================================
 // ИНИЦИАЛИЗАЦИЯ
 // ================================================================
-document.addEventListener('DOMContentLoaded', function() {
-    // Восстановление пользователя
-    if (currentUser.username) {
-        updateUserInfo();
-        showPage('catalog');
-    } else {
-        showPage('login');
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadData();
+    if (loadUser()) {
+        const exists = data.users.some(u => u.username === currentUser.username && !u.banned);
+        if (!exists) { currentUser = { username: null, avatar: '' }; localStorage.removeItem('trueshop_user'); }
     }
+    updateUserInfo();
     updateCartCount();
     updateOnlineStatus();
-    ensureVillageState();
+    if (currentUser.username) showPage('catalog');
+    else showPage('login');
     initMinesweeper();
+    ensureVillageState();
+    initBattleship();
 });
 </script>
 </body>

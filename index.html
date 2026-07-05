@@ -1,4 +1,12 @@
-// server.js - Backend for NeonChan
+/**
+ * NEON_CHAN // FULL MONOLITHIC CYBER-BOARD
+ * * Этот скрипт является полностью автономным. При первом запуске он автоматически
+ * разворачивает структуру папок (public, uploads) и генерирует фронтенд (HTML, CSS, JS).
+ * * Инструкция по запуску:
+ * 1. npm install express cors multer
+ * 2. node server.js
+ */
+
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -8,93 +16,15 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Настройка хранилища для картинок
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const uploadDir = './uploads';
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir);
-        }
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
-});
-const upload = multer({ storage: storage });
+// === 1. АВТОГЕНЕРАЦИЯ ДИРЕКТОРИЙ И СТАТИЧЕСКИХ ФАЙЛОВ ===
 
-app.use(cors());
-app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Имитация базы данных в памяти
-let boards = {
-    b: { name: 'Бред', threads: [] },
-    tech: { name: 'Технологии', threads: [] },
-    pr: { name: 'Программирование', threads: [] }
-};
-
-// Хелпер для создания постов
-function createPost(name, comment, file, isOp = false) {
-    return {
-        id: Math.floor(100000 + Math.random() * 900000),
-        time: new Date().toLocaleString('ru-RU'),
-        name: name || 'Аноним',
-        comment: comment || '',
-        file: file ? `/uploads/${file.filename}` : null,
-        isOp: isOp,
-        replies: []
-    };
-}
-
-// Получить все треды доски
-app.get('/api/board/:boardId', (req, res) => {
-    const board = boards[req.params.boardId];
-    if (!board) return res.status(404).json({ error: 'Доска не найдена' });
-    res.json(board);
+const dirs = ['./uploads', './public'];
+dirs.forEach(dir => {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
 });
 
-// Создать новый тред
-app.post('/api/board/:boardId/thread', upload.single('image'), (req, res) => {
-    const board = boards[req.params.boardId];
-    if (!board) return res.status(404).json({ error: 'Доска не найдена' });
-
-    const { name, comment } = req.body;
-    if (!comment && !req.file) {
-        return res.status(400).json({ error: 'Нужен текст или картинка для создания треда' });
-    }
-
-    const opPost = createPost(name, comment, req.file, true);
-    board.threads.unshift(opPost); // Новый тред в начало
-
-    res.status(201).json(opPost);
-});
-
-// Ответить в тред
-app.post('/api/board/:boardId/thread/:threadId', upload.single('image'), (req, res) => {
-    const board = boards[req.params.boardId];
-    if (!board) return res.status(404).json({ error: 'Доска не найдена' });
-
-    const thread = board.threads.find(t => t.id == req.params.threadId);
-    if (!thread) return res.status(404).json({ error: 'Тред не найден' });
-
-    const { name, comment } = req.body;
-    if (!comment && !req.file) {
-        return res.status(400).json({ error: 'Пост не может быть пустым' });
-    }
-
-    const replyPost = createPost(name, comment, req.file, false);
-    thread.replies.push(replyPost);
-
-    res.status(201).json(replyPost);
-});
-
-// Запуск сервера
-app.listen(PORT, () => {
-    console.log(`Server matrix loaded on http://localhost:${PORT}`);
-});
-<!DOCTYPE html>
+// Генерируем public/index.html
+const htmlContent = `<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -156,8 +86,10 @@ app.listen(PORT, () => {
     </div>
     <script src="app.js"></script>
 </body>
-</html>
-:root {
+</html>`;
+
+// Генерируем public/style.css
+const cssContent = `:root {
     --bg-color: #0a0a12;
     --panel-bg: #121224;
     --neon-cyan: #00f0ff;
@@ -166,15 +98,10 @@ app.listen(PORT, () => {
     --text-color: #e0e0ff;
     --text-muted: #7070a0;
     --neon-glow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.3);
-    --pink-glow: 0 0 10px rgba(ff, 0, 85, 0.5);
+    --pink-glow: 0 0 10px rgba(255, 0, 85, 0.5);
 }
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
+* { box-sizing: border-box; margin: 0; padding: 0; }
 body {
     background-color: var(--bg-color);
     color: var(--text-color);
@@ -183,20 +110,14 @@ body {
     overflow-x: hidden;
 }
 
-/* Кастомный скроллбар */
-::-webkit-scrollbar {
-    width: 8px;
-}
-::-webkit-scrollbar-track {
-    background: var(--bg-color);
-}
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-color); }
 ::-webkit-scrollbar-thumb {
     background: var(--neon-cyan);
     border-radius: 4px;
     box-shadow: var(--neon-glow);
 }
 
-/* Шапка сайта */
 .neon-header {
     background: var(--panel-bg);
     border-bottom: 2px solid var(--neon-cyan);
@@ -212,7 +133,6 @@ body {
     font-size: 2.5rem;
     letter-spacing: 5px;
     text-shadow: 0 0 10px var(--neon-cyan), 0 0 30px var(--neon-cyan);
-    position: relative;
 }
 
 .board-nav a {
@@ -227,22 +147,9 @@ body {
     text-shadow: var(--neon-glow);
 }
 
-.current-board-title {
-    margin-top: 10px;
-    color: var(--text-muted);
-}
-
-.current-board-title span {
-    color: var(--neon-green);
-    text-shadow: 0 0 5px var(--neon-green);
-}
-
-/* Контейнеры */
-.container {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 0 20px;
-}
+.current-board-title { margin-top: 10px; color: var(--text-muted); }
+.current-board-title span { color: var(--neon-green); text-shadow: 0 0 5px var(--neon-green); }
+.container { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
 
 .neon-border {
     border: 1px solid var(--neon-cyan);
@@ -250,15 +157,9 @@ body {
     box-shadow: var(--neon-glow);
     padding: 20px;
     margin-bottom: 30px;
-    position: relative;
 }
 
-/* Формы */
-h3 {
-    font-family: 'Orbitron', sans-serif;
-    color: var(--neon-cyan);
-    margin-bottom: 15px;
-}
+h3 { font-family: 'Orbitron', sans-serif; color: var(--neon-cyan); margin-bottom: 15px; }
 
 .input-group input, .input-group textarea, .modal-content textarea, .modal-content input {
     width: 100%;
@@ -277,16 +178,8 @@ h3 {
     box-shadow: var(--pink-glow);
 }
 
-.form-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.cyber-file-upload input[type="file"] {
-    display: none;
-}
-
+.form-actions { display: flex; justify-content: space-between; align-items: center; }
+.cyber-file-upload input[type="file"] { display: none; }
 .cyber-file-upload span {
     color: var(--neon-green);
     cursor: pointer;
@@ -317,127 +210,48 @@ h3 {
     box-shadow: var(--neon-glow);
 }
 
-/* Треды и Посты */
-.thread-card {
-    border-left: 4px solid var(--neon-pink);
-    margin-bottom: 40px;
-    padding-left: 15px;
-}
+.thread-card { border-left: 4px solid var(--neon-pink); margin-bottom: 40px; padding-left: 15px; }
+.post { background: var(--panel-bg); border: 1px solid rgba(0, 240, 255, 0.2); padding: 15px; margin-bottom: 10px; }
+.post.op-post { border: 1px solid var(--neon-cyan); box-shadow: 0 0 8px rgba(0, 240, 255, 0.1); }
+.post-header { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px; display: flex; gap: 15px; flex-wrap: wrap; }
+.post-author { color: var(--neon-pink); font-weight: bold; }
+.post-id { color: var(--neon-cyan); }
+.post-body { display: flex; gap: 20px; }
+.post-img { max-width: 150px; max-height: 150px; border: 1px solid var(--text-muted); object-fit: cover; cursor: pointer; transition: 0.3s; }
+.post-img:hover { border-color: var(--neon-cyan); box-shadow: var(--neon-glow); }
+.post-text { line-height: 1.5; white-space: pre-wrap; }
+.replies-container { margin-left: 40px; }
+.reply-link { color: var(--neon-green); text-decoration: none; cursor: pointer; font-size: 0.85rem; }
 
-.post {
-    background: var(--panel-bg);
-    border: 1px solid rgba(0, 240, 255, 0.2);
-    padding: 15px;
-    margin-bottom: 10px;
-}
-
-.post.op-post {
-    border: 1px solid var(--neon-cyan);
-    box-shadow: 0 0 8px rgba(0, 240, 255, 0.1);
-}
-
-.post-header {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-    display: flex;
-    gap: 15px;
-    flex-wrap: wrap;
-}
-
-.post-author {
-    color: var(--neon-pink);
-    font-weight: bold;
-}
-
-.post-id {
-    color: var(--neon-cyan);
-}
-
-.post-body {
-    display: flex;
-    gap: 20px;
-}
-
-.post-img {
-    max-width: 150px;
-    max-height: 150px;
-    border: 1px solid var(--text-muted);
-    object-fit: cover;
-    cursor: pointer;
-    transition: 0.3s;
-}
-
-.post-img:hover {
-    border-color: var(--neon-cyan);
-    box-shadow: var(--neon-glow);
-}
-
-.post-text {
-    line-height: 1.5;
-    white-space: pre-wrap;
-}
-
-.replies-container {
-    margin-left: 40px;
-}
-
-.reply-link {
-    color: var(--neon-green);
-    text-decoration: none;
-    cursor: pointer;
-    font-size: 0.85rem;
-}
-
-/* Модальное окно */
 .modal {
-    display: none;
-    position: fixed;
+    display: none; position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.8);
-    z-index: 1000;
-    justify-content: center;
-    align-items: center;
+    background: rgba(0,0,0,0.8); z-index: 1000;
+    justify-content: center; align-items: center;
 }
+.modal-content { width: 90%; max-width: 500px; }
+.close-btn { float: right; color: var(--neon-pink); font-size: 1.5rem; cursor: pointer; }`;
 
-.modal-content {
-    width: 90%;
-    max-width: 500px;
-}
-
-.close-btn {
-    float: right;
-    color: var(--neon-pink);
-    font-size: 1.5rem;
-    cursor: pointer;
-}
-// app.js
-const API_URL = 'http://localhost:3000/api';
+// Генерируем public/app.js
+const jsContent = `const API_URL = window.location.origin + '/api';
 let currentBoard = 'b';
 let activeThreadId = null;
 
-// Загрузка доски при старте страницы
-document.addEventListener('DOMContentLoaded', () => {
-    switchBoard(currentBoard);
-});
+document.addEventListener('DOMContentLoaded', () => { switchBoard(currentBoard); });
 
-// Переключение досок
 async function switchBoard(boardId) {
     currentBoard = boardId;
-    document.getElementById('board-name').innerText = `/${boardId}/`;
+    document.getElementById('board-name').innerText = '/' + boardId + '/';
     await fetchThreads();
 }
 
-// Получение тредов с бэкенда и их отрисовка
 async function fetchThreads() {
     const container = document.getElementById('threads-container');
     container.innerHTML = '<p style="color: var(--neon-cyan)">Синхронизация с матрицей...</p>';
-
     try {
-        const response = await fetch(`${API_URL}/board/${currentBoard}`);
+        const response = await fetch(API_URL + '/board/' + currentBoard);
         if (!response.ok) throw new Error('Ошибка сети');
         const board = await response.json();
-        
         container.innerHTML = '';
         
         if (board.threads.length === 0) {
@@ -448,85 +262,38 @@ async function fetchThreads() {
         board.threads.forEach(thread => {
             const threadCard = document.createElement('div');
             threadCard.className = 'thread-card';
+            let imgHtml = thread.file ? '<img src="' + thread.file + '" class="post-img" onclick="expandImage(this)">' : '';
             
-            // Рендер OP-поста (главного поста треда)
-            let imgHtml = thread.file ? `<img src="${API_URL.replace('/api', '')}${thread.file}" class="post-img" onclick="expandImage(this)">` : '';
-            
-            let threadHtml = `
-                <div class="post op-post">
-                    <div class="post-header">
-                        <span class="post-author">${escapeHtml(thread.name)}</span>
-                        <span>${thread.time}</span>
-                        <span class="post-id">№${thread.id}</span>
-                        <a class="reply-link" onclick="openReplyModal(${thread.id})">[ ОТВЕТИТЬ ]</a>
-                    </div>
-                    <div class="post-body">
-                        ${imgHtml}
-                        <div class="post-text">${escapeHtml(thread.comment)}</div>
-                    </div>
-                </div>
-                <div class="replies-container">
-            `;
+            let threadHtml = '<div class="post op-post"><div class="post-header"><span class="post-author">' + escapeHtml(thread.name) + '</span><span>' + thread.time + '</span><span class="post-id">№' + thread.id + '</span><a class="reply-link" onclick="openReplyModal(' + thread.id + ')">[ ОТВЕТИТЬ ]</a></div><div class="post-body">' + imgHtml + '<div class="post-text">' + escapeHtml(thread.comment) + '</div></div></div><div class="replies-container">';
 
-            // Рендер ответов внутри треда
             thread.replies.forEach(reply => {
-                let replyImgHtml = reply.file ? `<img src="${API_URL.replace('/api', '')}${reply.file}" class="post-img" onclick="expandImage(this)">` : '';
-                threadHtml += `
-                    <div class="post">
-                        <div class="post-header">
-                            <span class="post-author">${escapeHtml(reply.name)}</span>
-                            <span>${reply.time}</span>
-                            <span class="post-id">№${reply.id}</span>
-                        </div>
-                        <div class="post-body">
-                            ${replyImgHtml}
-                            <div class="post-text">${escapeHtml(reply.comment)}</div>
-                        </div>
-                    </div>
-                `;
+                let replyImgHtml = reply.file ? '<img src="' + reply.file + '" class="post-img" onclick="expandImage(this)">' : '';
+                threadHtml += '<div class="post"><div class="post-header"><span class="post-author">' + escapeHtml(reply.name) + '</span><span>' + reply.time + '</span><span class="post-id">№' + reply.id + '</span></div><div class="post-body">' + replyImgHtml + '<div class="post-text">' + escapeHtml(reply.comment) + '</div></div></div>';
             });
 
-            threadHtml += `</div>`;
+            threadHtml += '</div>';
             threadCard.innerHTML = threadHtml;
             container.appendChild(threadCard);
         });
-
     } catch (error) {
         container.innerHTML = '<p style="color: var(--neon-pink)">Ошибка слияния данных с бэкендом.</p>';
-        console.error(error);
     }
 }
 
-// Создание нового треда
 async function createNewThread(event) {
     event.preventDefault();
-    const name = document.getElementById('author-name').value;
-    const comment = document.getElementById('thread-comment').value;
-    const imageFile = document.getElementById('thread-image').files[0];
-
     const formData = new FormData();
-    formData.append('name', name);
-    formData.append('comment', comment);
-    if (imageFile) formData.append('image', imageFile);
+    formData.append('name', document.getElementById('author-name').value);
+    formData.append('comment', document.getElementById('thread-comment').value);
+    const img = document.getElementById('thread-image').files[0];
+    if (img) formData.append('image', img);
 
     try {
-        const response = await fetch(`${API_URL}/board/${currentBoard}/thread`, {
-            method: 'POST',
-            body: formData
-        });
-
-        if (response.ok) {
-            document.getElementById('new-thread-form').reset();
-            fetchThreads();
-        } else {
-            alert('Ошибка при создании треда');
-        }
-    } catch (err) {
-        console.error(err);
-    }
+        const response = await fetch(API_URL + '/board/' + currentBoard + '/thread', { method: 'POST', body: formData });
+        if (response.ok) { document.getElementById('new-thread-form').reset(); fetchThreads(); }
+    } catch (err) { console.error(err); }
 }
 
-// Управление модальным окном ответов
 function openReplyModal(threadId) {
     activeThreadId = threadId;
     document.getElementById('modal-thread-id').innerText = threadId;
@@ -538,48 +305,106 @@ function closeReplyModal() {
     document.getElementById('reply-form').reset();
 }
 
-// Отправка ответа в тред
 async function submitReply(event) {
     event.preventDefault();
-    const name = document.getElementById('reply-name').value;
-    const comment = document.getElementById('reply-comment').value;
-    const imageFile = document.getElementById('reply-image').files[0];
-
     const formData = new FormData();
-    formData.append('name', name);
-    formData.append('comment', comment);
-    if (imageFile) formData.append('image', imageFile);
+    formData.append('name', document.getElementById('reply-name').value);
+    formData.append('comment', document.getElementById('reply-comment').value);
+    const img = document.getElementById('reply-image').files[0];
+    if (img) formData.append('image', img);
 
     try {
-        const response = await fetch(`${API_URL}/board/${currentBoard}/thread/${activeThreadId}`, {
-            method: 'POST',
-            body: formData
-        });
-
-        if (response.ok) {
-            closeReplyModal();
-            fetchThreads();
-        } else {
-            alert('Не удалось отправить ответ');
-        }
-    } catch (err) {
-        console.error(err);
-    }
+        const response = await fetch(API_URL + '/board/' + currentBoard + '/thread/' + activeThreadId, { method: 'POST', body: formData });
+        if (response.ok) { closeReplyModal(); fetchThreads(); }
+    } catch (err) { console.error(err); }
 }
 
-// Увеличение картинок по клику (как на оригинальном имиджборде)
 function expandImage(img) {
     if (img.style.maxWidth === '150px' || img.style.maxWidth === '') {
-        img.style.maxWidth = '100%';
-        img.style.maxHeight = 'none';
+        img.style.maxWidth = '100%'; img.style.maxHeight = 'none';
     } else {
-        img.style.maxWidth = '150px';
-        img.style.maxHeight = '150px';
+        img.style.maxWidth = '150px'; img.style.maxHeight = '150px';
     }
 }
 
-// Защита от XSS (внедрения вредоносного кода через посты)
 function escapeHtml(text) {
     const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    return text.replace(/[&<>"']/g, m => map[m]);
+}`;
+
+fs.writeFileSync('./public/index.html', htmlContent);
+fs.writeFileSync('./public/style.css', cssContent);
+fs.writeFileSync('./public/app.js', jsContent);
+
+console.log('>> [SUCCESS] Neon UI assets spawned successfully in /public');
+
+// === 2. БЭКЕНД И ОБРАБОТКА ДАННЫХ ===
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, './uploads'),
+    filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+});
+const upload = multer({ storage: storage });
+
+app.use(cors());
+app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// База данных в памяти (можно заменить на MongoDB/SQLite)
+let boards = {
+    b: { name: 'Бред', threads: [] },
+    tech: { name: 'Технологии', threads: [] },
+    pr: { name: 'Программирование', threads: [] }
+};
+
+function createPost(name, comment, file, isOp = false) {
+    return {
+        id: Math.floor(100000 + Math.random() * 900000),
+        time: new Date().toLocaleString('ru-RU'),
+        name: name || 'Аноним',
+        comment: comment || '',
+        file: file ? `/uploads/${file.filename}` : null,
+        isOp: isOp,
+        replies: []
+    };
 }
+
+app.get('/api/board/:boardId', (req, res) => {
+    const board = boards[req.params.boardId];
+    if (!board) return res.status(404).json({ error: 'Доска не найдена' });
+    res.json(board);
+});
+
+app.post('/api/board/:boardId/thread', upload.single('image'), (req, res) => {
+    const board = boards[req.params.boardId];
+    if (!board) return res.status(404).json({ error: 'Доска не найдена' });
+
+    const { name, comment } = req.body;
+    if (!comment && !req.file) return res.status(400).json({ error: 'Необходим контент' });
+
+    const opPost = createPost(name, comment, req.file, true);
+    board.threads.unshift(opPost);
+    res.status(201).json(opPost);
+});
+
+app.post('/api/board/:boardId/thread/:threadId', upload.single('image'), (req, res) => {
+    const board = boards[req.params.boardId];
+    if (!board) return res.status(404).json({ error: 'Доска не найдена' });
+
+    const thread = board.threads.find(t => t.id == req.params.threadId);
+    if (!thread) return res.status(404).json({ error: 'Тред не найден' });
+
+    const { name, comment } = req.body;
+    if (!comment && !req.file) return res.status(400).json({ error: 'Необходим контент' });
+
+    const replyPost = createPost(name, comment, req.file, false);
+    thread.replies.push(replyPost);
+    res.status(201).json(replyPost);
+});
+
+// Запуск сервера матрицы
+app.listen(PORT, () => {
+    console.log(`>> [READY] NeonChan core successfully loaded.`);
+    console.log(`>> Access the network: http://localhost:${PORT}`);
+});

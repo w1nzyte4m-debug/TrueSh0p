@@ -1,5 +1,5 @@
 /*
- * TKK Forum — Два раздела: Треды и Гайды, надёжная авторизация
+ * TKK Forum – Улучшенный интерфейс с вкладками и модальным созданием
  * Запуск: npm install ws formidable && node tkkforum.js
  */
 
@@ -21,7 +21,7 @@ const THREAD_BUMP_LIMIT = 500;
 // ================== ХРАНИЛИЩЕ ==================
 let store = {
   users: {},
-  threads: [],  // каждый тред имеет поле category: 'text' или 'guide'
+  threads: [],
   nextThreadId: 1,
   nextPostId: 1
 };
@@ -108,9 +108,7 @@ wss.on('connection', (ws) => {
       store.users[username] = { password, token };
       clients.set(ws, { username, token });
       saveData();
-      // Сначала отправляем уведомление об успехе регистрации
       ws.send(JSON.stringify({ type: 'regSuccess' }));
-      // Затем сразу авторизуем
       ws.send(JSON.stringify({ type: 'authSuccess', username, token }));
     }
 
@@ -148,7 +146,7 @@ wss.on('connection', (ws) => {
       const title = msg.title?.trim() || 'Без названия';
       const text = msg.text?.trim() || '';
       const image = msg.image || null;
-      const category = msg.category || 'text'; // 'text' или 'guide'
+      const category = msg.category || 'text';
 
       const thread = {
         id: store.nextThreadId++,
@@ -216,7 +214,7 @@ wss.on('connection', (ws) => {
 
     // ==== Запросы данных ====
     else if (msg.type === 'getThreads') {
-      const category = msg.category; // 'all', 'text', 'guide'
+      const category = msg.category;
       const filtered = category && category !== 'all'
         ? store.threads.filter(t => t.category === category)
         : store.threads;
@@ -334,7 +332,7 @@ function handleFileUpload(req, res) {
   });
 }
 
-// ================== HTML (интерфейс с двумя вкладками) ==================
+// ================== HTML (улучшенный интерфейс) ==================
 function getIndexHTML() {
   return `<!DOCTYPE html>
 <html lang="ru">
@@ -370,7 +368,7 @@ a { color: var(--neon-cyan); text-decoration: none; }
 a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 .header {
   text-align: center; padding: 30px 20px;
-  border-bottom: 2px solid var(--border); margin-bottom: 30px;
+  border-bottom: 2px solid var(--border); margin-bottom: 25px;
   position: relative;
 }
 .header h1 {
@@ -400,32 +398,28 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 .neon-btn.magenta:hover { box-shadow: 0 0 18px var(--neon-magenta); background: rgba(255,0,255,0.1); }
 .neon-btn.green { border-color: var(--neon-green); color: var(--neon-green); }
 .neon-btn.green:hover { box-shadow: 0 0 18px var(--neon-green); background: rgba(0,255,0,0.1); }
-.form-card {
-  background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
-  padding: 25px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
-.form-title { font-size: 1.4rem; margin-bottom: 20px; color: var(--neon-cyan); border-left: 4px solid var(--neon-magenta); padding-left: 12px; }
-.field { margin-bottom: 15px; }
-.field label { display: block; margin-bottom: 5px; color: var(--text-dim); font-size: 0.9rem; }
-.field input, .field textarea {
-  width: 100%; padding: 10px 15px; background: #0a0a18; border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text); font-family: inherit; font-size: 0.95rem; outline: none;
-}
-.field input:focus, .field textarea:focus { border-color: var(--neon-cyan); box-shadow: 0 0 12px rgba(0,255,255,0.4); }
-.file-upload { position: relative; display: inline-block; cursor: pointer; }
-.file-upload input[type="file"] { position: absolute; left:0; top:0; opacity:0; width:100%; height:100%; cursor: pointer; }
-.image-preview { max-width: 150px; max-height: 150px; margin-top: 10px; display: none; border: 1px solid var(--border); border-radius: 6px; }
 
 /* Табы категорий */
-.tabs { display: flex; gap: 0; margin-bottom: 25px; border-bottom: 2px solid var(--border); }
+.tabs {
+  display: flex; gap: 0; margin-bottom: 20px;
+  border-bottom: 2px solid var(--border);
+}
 .tab-cat {
-  padding: 10px 25px; cursor: pointer; color: var(--text-dim); font-weight: 500;
-  text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s;
-  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  padding: 12px 30px; cursor: pointer; color: var(--text-dim);
+  font-weight: 500; text-transform: uppercase; letter-spacing: 1px;
+  transition: all 0.3s; border-bottom: 2px solid transparent; margin-bottom: -2px;
+  font-size: 1.1rem;
 }
 .tab-cat.active { color: var(--neon-cyan); border-bottom-color: var(--neon-cyan); }
 .tab-cat:hover { color: #fff; }
 
+/* Кнопка создать */
+.create-btn-wrapper {
+  display: flex; justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
+/* Список тредов */
 .thread-list { display: flex; flex-direction: column; gap: 20px; }
 .thread-preview {
   background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
@@ -450,16 +444,33 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 .post-text { white-space: pre-wrap; word-break: break-word; }
 .back-btn { margin-bottom: 20px; display: inline-block; }
 
-/* Модалка */
+/* Модальные окна */
 .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; z-index: 1000; }
 .modal.active { display: flex; }
-.modal-content { background: var(--bg); border: 2px solid var(--neon-cyan); border-radius: 12px; padding: 30px; width: 400px; max-width: 90vw; position: relative; }
+.modal-content { background: var(--bg); border: 2px solid var(--neon-cyan); border-radius: 12px; padding: 30px; width: 500px; max-width: 90vw; position: relative; max-height: 90vh; overflow-y: auto; }
 .close-modal { position: absolute; top: 15px; right: 15px; color: #fff; font-size: 1.5rem; cursor: pointer; }
 .tab { display: flex; gap: 20px; margin-bottom: 20px; }
 .tab-btn { color: var(--text-dim); cursor: pointer; padding-bottom: 5px; }
 .tab-btn.active { color: var(--neon-cyan); border-bottom: 2px solid var(--neon-cyan); }
 
-/* Уведомление */
+/* Поля формы */
+.form-card {
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 25px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.form-title { font-size: 1.4rem; margin-bottom: 20px; color: var(--neon-cyan); border-left: 4px solid var(--neon-magenta); padding-left: 12px; }
+.field { margin-bottom: 15px; }
+.field label { display: block; margin-bottom: 5px; color: var(--text-dim); font-size: 0.9rem; }
+.field input, .field textarea {
+  width: 100%; padding: 10px 15px; background: #0a0a18; border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-family: inherit; font-size: 0.95rem; outline: none;
+}
+.field input:focus, .field textarea:focus { border-color: var(--neon-cyan); box-shadow: 0 0 12px rgba(0,255,255,0.4); }
+.file-upload { position: relative; display: inline-block; cursor: pointer; }
+.file-upload input[type="file"] { position: absolute; left:0; top:0; opacity:0; width:100%; height:100%; cursor: pointer; }
+.image-preview { max-width: 150px; max-height: 150px; margin-top: 10px; display: none; border: 1px solid var(--border); border-radius: 6px; }
+
+/* Toast */
 .toast {
   position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
   background: var(--card-bg); border: 1px solid var(--neon-green);
@@ -495,6 +506,35 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
   </div>
 </div>
 
+<!-- Табы выбора категории -->
+<div class="tabs">
+  <div class="tab-cat active" data-cat="all">Все</div>
+  <div class="tab-cat" data-cat="text">Треды</div>
+  <div class="tab-cat" data-cat="guide">Гайды</div>
+</div>
+
+<!-- Кнопка создания треда -->
+<div class="create-btn-wrapper">
+  <button class="neon-btn green" id="open-create-modal">+ Создать тред / гайд</button>
+</div>
+
+<!-- Основной контент -->
+<div id="main-page">
+  <div class="thread-list" id="thread-list"></div>
+</div>
+
+<!-- Просмотр треда -->
+<div class="thread-view" id="thread-view">
+  <button class="neon-btn back-btn" id="back-from-thread">← Назад</button>
+  <div id="thread-detail"></div>
+</div>
+
+<!-- Профиль -->
+<div id="profile-page" style="display:none">
+  <button class="neon-btn back-btn" id="back-from-profile">← На главную</button>
+  <div id="profile-content"></div>
+</div>
+
 <!-- Модалка авторизации -->
 <div class="modal" id="auth-modal">
   <div class="modal-content">
@@ -518,28 +558,21 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
   </div>
 </div>
 
-<!-- Основной интерфейс -->
-<div id="main-page">
-  <!-- Табы категорий -->
-  <div class="tabs">
-    <div class="tab-cat active" data-cat="all">Все</div>
-    <div class="tab-cat" data-cat="text">Треды</div>
-    <div class="tab-cat" data-cat="guide">Гайды</div>
-  </div>
-
-  <!-- Форма создания треда -->
-  <div class="form-card">
-    <div class="form-title">Создать</div>
+<!-- Модалка создания треда -->
+<div class="modal" id="create-modal">
+  <div class="modal-content">
+    <span class="close-modal" id="close-create-modal">&times;</span>
+    <div class="form-title">Создать публикацию</div>
     <div class="field">
       <label>Категория</label>
-      <select id="thread-category" style="background:#0a0a18; border:1px solid var(--border); color:var(--text); padding:8px; border-radius:6px; width:100%;">
-        <option value="text">Тред</option>
-        <option value="guide">Гайд</option>
+      <select id="thread-category" style="background:#0a0a18; border:1px solid var(--border); color:var(--text); padding:10px; border-radius:6px; width:100%;">
+        <option value="text">Тред (обсуждение)</option>
+        <option value="guide">Гайд (руководство)</option>
       </select>
     </div>
     <div class="field"><input type="text" id="thread-title" placeholder="Заголовок" maxlength="100"></div>
     <div class="field"><input type="text" id="thread-name" placeholder="Имя (для анонимов)"></div>
-    <div class="field"><textarea id="thread-text" rows="3" placeholder="Текст" maxlength="2000"></textarea></div>
+    <div class="field"><textarea id="thread-text" rows="5" placeholder="Текст" maxlength="2000"></textarea></div>
     <div class="field">
       <label class="file-upload neon-btn">
         📎 Изображение
@@ -550,20 +583,6 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
     <button class="neon-btn green" id="create-thread-btn">Опубликовать</button>
     <div style="color:red; margin-top:10px" id="thread-error"></div>
   </div>
-
-  <div class="thread-list" id="thread-list"></div>
-</div>
-
-<!-- Просмотр треда -->
-<div class="thread-view" id="thread-view">
-  <button class="neon-btn back-btn" id="back-from-thread">← Назад</button>
-  <div id="thread-detail"></div>
-</div>
-
-<!-- Профиль -->
-<div id="profile-page" style="display:none">
-  <button class="neon-btn back-btn" id="back-from-profile">← На главную</button>
-  <div id="profile-content"></div>
 </div>
 
 <script>
@@ -572,22 +591,18 @@ let ws;
 let currentUser = null;
 let token = null;
 let pendingMessages = [];
-let currentCategory = 'all'; // all, text, guide
+let currentCategory = 'all';
 
-// Подключение с индикатором
 function connectWebSocket() {
   ws = new WebSocket('ws://' + location.host);
   const connStatus = document.getElementById('conn-status');
 
   ws.onopen = () => {
     connStatus.classList.add('online');
-    // Отправляем накопленные сообщения
     pendingMessages.forEach(msg => ws.send(msg));
     pendingMessages = [];
-    // Восстановление сессии
     const saved = JSON.parse(sessionStorage.getItem('tkkSession'));
     if (saved) safeSend({ type: 'restoreSession', username: saved.username, token: saved.token });
-    // Загружаем треды
     loadThreads();
   };
 
@@ -607,26 +622,21 @@ function connectWebSocket() {
         document.getElementById('auth-modal').classList.remove('active');
         loadThreads();
         break;
-
       case 'regSuccess':
         showToast('✅ Вы успешно зарегистрированы!');
-        // После этого сразу придёт authSuccess
         break;
-
       case 'authError':
         document.getElementById('login-error').textContent = msg.message;
         break;
-
       case 'regError':
         document.getElementById('reg-error').textContent = msg.message;
         break;
-
       case 'threadsList':
         renderThreadList(msg.threads);
         break;
-
       case 'threadCreated':
         if (msg.success) {
+          document.getElementById('create-modal').classList.remove('active');
           document.getElementById('thread-title').value = '';
           document.getElementById('thread-name').value = '';
           document.getElementById('thread-text').value = '';
@@ -635,16 +645,13 @@ function connectWebSocket() {
           loadThreads();
         }
         break;
-
       case 'threadDetail':
         renderThread(msg.thread);
         break;
-
       case 'postAdded':
         if (currentThreadId === msg.threadId) loadThread(currentThreadId);
         loadThreads();
         break;
-
       case 'profileData':
         renderProfile(msg.profile);
         break;
@@ -693,14 +700,6 @@ const threadListDiv = document.getElementById('thread-list');
 const threadDetailDiv = document.getElementById('thread-detail');
 const backFromThread = document.getElementById('back-from-thread');
 const backFromProfile = document.getElementById('back-from-profile');
-const createThreadBtn = document.getElementById('create-thread-btn');
-const threadCategory = document.getElementById('thread-category');
-const threadTitle = document.getElementById('thread-title');
-const threadName = document.getElementById('thread-name');
-const threadText = document.getElementById('thread-text');
-const threadImage = document.getElementById('thread-image');
-const threadImagePreview = document.getElementById('thread-image-preview');
-const threadError = document.getElementById('thread-error');
 
 // Табы категорий
 document.querySelectorAll('.tab-cat').forEach(tab => {
@@ -712,21 +711,129 @@ document.querySelectorAll('.tab-cat').forEach(tab => {
   });
 });
 
-function updateAuthUI() {
+// Модалка создания
+const createModal = document.getElementById('create-modal');
+const openCreateModalBtn = document.getElementById('open-create-modal');
+const closeCreateModalBtn = document.getElementById('close-create-modal');
+const threadCategory = document.getElementById('thread-category');
+const threadTitle = document.getElementById('thread-title');
+const threadName = document.getElementById('thread-name');
+const threadText = document.getElementById('thread-text');
+const threadImage = document.getElementById('thread-image');
+const threadImagePreview = document.getElementById('thread-image-preview');
+const threadError = document.getElementById('thread-error');
+const createThreadBtn = document.getElementById('create-thread-btn');
+
+openCreateModalBtn.onclick = () => {
+  // Установить имя, если авторизован
   if (currentUser) {
-    authArea.style.display = 'none';
-    userArea.style.display = 'flex';
-    usernameDisplay.textContent = currentUser;
-    threadName.disabled = true;
     threadName.value = currentUser;
+    threadName.disabled = true;
   } else {
-    authArea.style.display = 'flex';
-    userArea.style.display = 'none';
-    threadName.disabled = false;
     threadName.value = '';
+    threadName.disabled = false;
   }
+  createModal.classList.add('active');
+};
+
+closeCreateModalBtn.onclick = () => createModal.classList.remove('active');
+
+threadImage.onchange = (e) => {
+  const file = e.target.files[0];
+  const preview = threadImagePreview;
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (ev) => { preview.src = ev.target.result; preview.style.display = 'block'; };
+    reader.readAsDataURL(file);
+  } else preview.style.display = 'none';
+};
+
+createThreadBtn.onclick = async () => {
+  const title = threadTitle.value.trim();
+  const name = currentUser ? currentUser : (threadName.value.trim() || 'Аноним');
+  const text = threadText.value.trim();
+  const category = threadCategory.value;
+  if (!title && !text) {
+    threadError.textContent = 'Введите заголовок или текст';
+    return;
+  }
+  let image = null;
+  if (threadImage.files.length > 0) {
+    const formData = new FormData();
+    formData.append('image', threadImage.files[0]);
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const json = await res.json();
+    image = json.image;
+  }
+  safeSend({ type: 'createThread', title, name, text, image, category, token });
+  threadError.textContent = '';
+};
+
+// Авторизация
+document.getElementById('show-login-btn').onclick = () => {
+  authModal.classList.add('active');
+  tabLogin.click();
+};
+document.getElementById('show-register-btn').onclick = () => {
+  authModal.classList.add('active');
+  tabRegister.click();
+};
+closeAuthModal.onclick = () => authModal.classList.remove('active');
+tabLogin.onclick = () => {
+  tabLogin.classList.add('active');
+  tabRegister.classList.remove('active');
+  loginForm.style.display = 'block';
+  registerForm.style.display = 'none';
+};
+tabRegister.onclick = () => {
+  tabRegister.classList.add('active');
+  tabLogin.classList.remove('active');
+  registerForm.style.display = 'block';
+  loginForm.style.display = 'none';
+};
+loginSubmit.onclick = () => {
+  const u = document.getElementById('login-username').value.trim();
+  const p = document.getElementById('login-password').value.trim();
+  if (!u || !p) { loginError.textContent = 'Заполните поля'; return; }
+  safeSend({ type: 'login', username: u, password: p });
+  loginError.textContent = '';
+};
+registerSubmit.onclick = () => {
+  const u = document.getElementById('reg-username').value.trim();
+  const p = document.getElementById('reg-password').value.trim();
+  if (!u || !p) { regError.textContent = 'Заполните поля'; return; }
+  safeSend({ type: 'register', username: u, password: p });
+  regError.textContent = '';
+};
+
+// Профиль
+profileBtn.onclick = () => {
+  if (currentUser) safeSend({ type: 'getProfile', username: currentUser });
+};
+function renderProfile(profile) {
+  mainPage.style.display = 'none';
+  threadView.style.display = 'none';
+  profilePage.style.display = 'block';
+  document.getElementById('profile-content').innerHTML = `
+    <h2 style="color:var(--neon-cyan)">Профиль: ${esc(profile.username)}</h2>
+    <p>Всего сообщений: ${profile.postsCount}</p>
+    <h3 style="margin-top:20px; color:var(--neon-magenta)">Активность</h3>
+    ${profile.threads.map(t => `<div>#${t.id} <a href="#" onclick="openThread(${t.id})">${esc(t.title)}</a> (${t.category === 'guide' ? 'Гайд' : 'Тред'}, ${t.postCount} постов)</div>`).join('')}
+  `;
 }
 
+// Навигация
+backFromThread.onclick = () => {
+  threadView.style.display = 'none';
+  mainPage.style.display = 'block';
+  currentThreadId = null;
+};
+backFromProfile.onclick = () => {
+  profilePage.style.display = 'none';
+  mainPage.style.display = 'block';
+};
+
+// Треды
 function loadThreads() {
   safeSend({ type: 'getThreads', category: currentCategory });
 }
@@ -736,12 +843,12 @@ function renderThreadList(threads) {
     ? '<p style="color:var(--text-dim); text-align:center; padding:30px;">Здесь пока ничего нет. Создайте первый тред или гайд!</p>'
     : threads.map(t => {
         const imgTag = t.image ? `<img src="/uploads/${t.image}" class="thumb" loading="lazy">` : '';
-        const catBadge = t.category === 'guide' ? ' [Гайд]' : '';
+        const catBadge = t.category === 'guide' ? ' [Гайд]' : ' [Тред]';
         return `
           <div class="thread-preview" data-id="${t.id}">
             ${imgTag}
             <div class="thread-info">
-              <div class="thread-title">${esc(t.title)}${catBadge}</div>
+              <div class="thread-title">${esc(t.title)}<span style="font-size:0.7rem; color:var(--neon-magenta);">${catBadge}</span></div>
               <div class="thread-meta">
                 ${esc(t.author)} • ${new Date(t.bumpAt).toLocaleString()} • ${t.postCount} постов
               </div>
@@ -809,7 +916,15 @@ function renderThread(thread) {
 
   threadDetailDiv.innerHTML = html;
   document.getElementById('send-post-btn').onclick = () => submitPost(thread.id);
-  document.getElementById('post-image').onchange = (e) => previewFile(e, 'post-image-preview');
+  document.getElementById('post-image').onchange = (e) => {
+    const file = e.target.files[0];
+    const preview = document.getElementById('post-image-preview');
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => { preview.src = ev.target.result; preview.style.display = 'block'; };
+      reader.readAsDataURL(file);
+    } else preview.style.display = 'none';
+  };
 }
 
 async function submitPost(threadId) {
@@ -834,121 +949,27 @@ async function submitPost(threadId) {
   document.getElementById('post-image-preview').style.display = 'none';
 }
 
-// Создание треда
-createThreadBtn.onclick = async () => {
-  const title = threadTitle.value.trim();
-  const name = currentUser ? currentUser : (threadName.value.trim() || 'Аноним');
-  const text = threadText.value.trim();
-  const category = threadCategory.value;
-  if (!title && !text) {
-    threadError.textContent = 'Введите заголовок или текст';
-    return;
-  }
-  let image = null;
-  if (threadImage.files.length > 0) {
-    const formData = new FormData();
-    formData.append('image', threadImage.files[0]);
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    const json = await res.json();
-    image = json.image;
-  }
-  safeSend({ type: 'createThread', title, name, text, image, category, token });
-  threadError.textContent = '';
-};
-
-// Профиль
-profileBtn.onclick = () => {
-  if (currentUser) safeSend({ type: 'getProfile', username: currentUser });
-};
-function renderProfile(profile) {
-  mainPage.style.display = 'none';
-  threadView.style.display = 'none';
-  profilePage.style.display = 'block';
-  document.getElementById('profile-content').innerHTML = `
-    <h2 style="color:var(--neon-cyan)">Профиль: ${esc(profile.username)}</h2>
-    <p>Всего сообщений: ${profile.postsCount}</p>
-    <h3 style="margin-top:20px; color:var(--neon-magenta)">Активность</h3>
-    ${profile.threads.map(t => `<div>#${t.id} <a href="#" onclick="openThread(${t.id})">${esc(t.title)}</a> (${t.category === 'guide' ? 'Гайд' : 'Тред'}, ${t.postCount} постов)</div>`).join('')}
-  `;
-}
-
-// Навигация
-backFromThread.onclick = () => {
-  threadView.style.display = 'none';
-  mainPage.style.display = 'block';
-  currentThreadId = null;
-};
-backFromProfile.onclick = () => {
-  profilePage.style.display = 'none';
-  mainPage.style.display = 'block';
-};
-
-// Модалка авторизации
-document.getElementById('show-login-btn').onclick = () => {
-  authModal.classList.add('active');
-  tabLogin.click();
-};
-document.getElementById('show-register-btn').onclick = () => {
-  authModal.classList.add('active');
-  tabRegister.click();
-};
-closeAuthModal.onclick = () => authModal.classList.remove('active');
-
-tabLogin.onclick = () => {
-  tabLogin.classList.add('active');
-  tabRegister.classList.remove('active');
-  loginForm.style.display = 'block';
-  registerForm.style.display = 'none';
-};
-tabRegister.onclick = () => {
-  tabRegister.classList.add('active');
-  tabLogin.classList.remove('active');
-  registerForm.style.display = 'block';
-  loginForm.style.display = 'none';
-};
-
-loginSubmit.onclick = () => {
-  const u = document.getElementById('login-username').value.trim();
-  const p = document.getElementById('login-password').value.trim();
-  if (!u || !p) {
-    loginError.textContent = 'Заполните поля';
-    return;
-  }
-  safeSend({ type: 'login', username: u, password: p });
-  loginError.textContent = '';
-};
-
-registerSubmit.onclick = () => {
-  const u = document.getElementById('reg-username').value.trim();
-  const p = document.getElementById('reg-password').value.trim();
-  if (!u || !p) {
-    regError.textContent = 'Заполните поля';
-    return;
-  }
-  safeSend({ type: 'register', username: u, password: p });
-  regError.textContent = '';
-};
-
 logoutBtn.onclick = () => {
-  currentUser = null;
-  token = null;
+  currentUser = null; token = null;
   sessionStorage.removeItem('tkkSession');
   updateAuthUI();
   loadThreads();
 };
 
-// Утилиты
-function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function previewFile(input, previewId) {
-  const file = input.target.files[0];
-  const preview = document.getElementById(previewId);
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = (e) => { preview.src = e.target.result; preview.style.display = 'block'; };
-    reader.readAsDataURL(file);
-  } else preview.style.display = 'none';
+function updateAuthUI() {
+  if (currentUser) {
+    authArea.style.display = 'none';
+    userArea.style.display = 'flex';
+    usernameDisplay.textContent = currentUser;
+    if (document.getElementById('thread-name')) threadName.disabled = true;
+  } else {
+    authArea.style.display = 'flex';
+    userArea.style.display = 'none';
+    if (document.getElementById('thread-name')) threadName.disabled = false;
+  }
 }
-threadImage.onchange = (e) => previewFile(e, 'thread-image-preview');
+
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // Запуск
 connectWebSocket();

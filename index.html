@@ -1,5 +1,5 @@
 /*
- * TKK Forum – Улучшенный интерфейс с вкладками и модальным созданием
+ * TKK Forum – Исправлено создание тредов, диагностика ошибок
  * Запуск: npm install ws formidable && node tkkforum.js
  */
 
@@ -10,7 +10,6 @@ const url = require('url');
 const WebSocket = require('ws');
 const formidable = require('formidable');
 
-// ================== КОНФИГУРАЦИЯ ==================
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data.json');
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
@@ -18,13 +17,7 @@ const MAX_THREADS = 50;
 const MAX_POSTS_PER_THREAD = 500;
 const THREAD_BUMP_LIMIT = 500;
 
-// ================== ХРАНИЛИЩЕ ==================
-let store = {
-  users: {},
-  threads: [],
-  nextThreadId: 1,
-  nextPostId: 1
-};
+let store = { users: {}, threads: [], nextThreadId: 1, nextPostId: 1 };
 
 try {
   if (fs.existsSync(DATA_FILE)) {
@@ -34,41 +27,23 @@ try {
     store.nextThreadId = raw.nextThreadId || 1;
     store.nextPostId = raw.nextPostId || 1;
   }
-} catch (e) {
-  console.error('Ошибка загрузки данных:', e);
-}
+} catch (e) { console.error('Ошибка загрузки данных:', e); }
 
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 function saveData() {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), 'utf8');
-  } catch (e) {
-    console.error('Ошибка сохранения:', e);
-  }
+  try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), 'utf8'); } catch (e) {}
 }
-
-// ================== УТИЛИТЫ ==================
-function genToken() {
-  return Math.random().toString(36).substr(2) + Date.now().toString(36);
-}
-
-function getThreadById(id) {
-  return store.threads.find(t => t.id === id);
-}
+function genToken() { return Math.random().toString(36).substr(2) + Date.now().toString(36); }
+function getThreadById(id) { return store.threads.find(t => t.id === id); }
 
 function cleanOldThreads() {
   while (store.threads.length > MAX_THREADS) {
     const removed = store.threads.pop();
     if (removed.image) fs.unlink(path.join(UPLOAD_DIR, removed.image), () => {});
-    removed.posts.forEach(p => {
-      if (p.image) fs.unlink(path.join(UPLOAD_DIR, p.image), () => {});
-    });
+    removed.posts.forEach(p => { if (p.image) fs.unlink(path.join(UPLOAD_DIR, p.image), () => {}); });
   }
 }
-
 function bumpThread(thread) {
   thread.bumpAt = Date.now();
   store.threads = store.threads.filter(t => t.id !== thread.id);
@@ -81,29 +56,20 @@ const clients = new Map();
 
 function broadcast(msg) {
   const data = JSON.stringify(msg);
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(data);
-    }
-  });
+  wss.clients.forEach(client => { if (client.readyState === WebSocket.OPEN) client.send(data); });
 }
 
 wss.on('connection', (ws) => {
   clients.set(ws, null);
-
   ws.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
+    console.log('📨 Сервер получил:', msg.type);
 
-    // ==== Регистрация (с авто-входом и уведомлением) ====
     if (msg.type === 'register') {
       const { username, password } = msg;
-      if (!username || !password) {
-        return ws.send(JSON.stringify({ type: 'regError', message: 'Заполните все поля' }));
-      }
-      if (store.users[username]) {
-        return ws.send(JSON.stringify({ type: 'regError', message: 'Пользователь уже существует' }));
-      }
+      if (!username || !password) return ws.send(JSON.stringify({ type: 'regError', message: 'Заполните все поля' }));
+      if (store.users[username]) return ws.send(JSON.stringify({ type: 'regError', message: 'Пользователь уже существует' }));
       const token = genToken();
       store.users[username] = { password, token };
       clients.set(ws, { username, token });
@@ -111,22 +77,16 @@ wss.on('connection', (ws) => {
       ws.send(JSON.stringify({ type: 'regSuccess' }));
       ws.send(JSON.stringify({ type: 'authSuccess', username, token }));
     }
-
-    // ==== Авторизация ====
     else if (msg.type === 'login') {
       const { username, password } = msg;
       const user = store.users[username];
-      if (!user || user.password !== password) {
-        return ws.send(JSON.stringify({ type: 'authError', message: 'Неверный логин или пароль' }));
-      }
+      if (!user || user.password !== password) return ws.send(JSON.stringify({ type: 'authError', message: 'Неверный логин или пароль' }));
       const token = genToken();
       user.token = token;
       clients.set(ws, { username, token });
       saveData();
       ws.send(JSON.stringify({ type: 'authSuccess', username, token }));
     }
-
-    // ==== Восстановление сессии ====
     else if (msg.type === 'restoreSession') {
       const { username, token } = msg;
       const user = store.users[username];
@@ -137,101 +97,62 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'authError', message: 'Сессия истекла' }));
       }
     }
-
-    // ==== Создание треда (с категорией) ====
     else if (msg.type === 'createThread') {
-      const client = clients.get(ws);
-      const isAuth = client && client.username && store.users[client.username]?.token === client.token;
-      const authorName = isAuth ? client.username : (msg.name?.trim() || 'Аноним');
-      const title = msg.title?.trim() || 'Без названия';
-      const text = msg.text?.trim() || '';
-      const image = msg.image || null;
-      const category = msg.category || 'text';
+      try {
+        const client = clients.get(ws);
+        const isAuth = client && client.username && store.users[client.username]?.token === client.token;
+        const authorName = isAuth ? client.username : (msg.name?.trim() || 'Аноним');
+        const title = msg.title?.trim() || 'Без названия';
+        const text = msg.text?.trim() || '';
+        const image = msg.image || null;
+        const category = msg.category || 'text';
 
-      const thread = {
-        id: store.nextThreadId++,
-        title,
-        author: authorName,
-        text,
-        image,
-        category,
-        createdAt: Date.now(),
-        bumpAt: Date.now(),
-        posts: []
-      };
-      store.threads.unshift(thread);
-      cleanOldThreads();
-      saveData();
+        const thread = {
+          id: store.nextThreadId++,
+          title,
+          author: authorName,
+          text,
+          image,
+          category,
+          createdAt: Date.now(),
+          bumpAt: Date.now(),
+          posts: []
+        };
+        store.threads.unshift(thread);
+        cleanOldThreads();
+        saveData();
 
-      broadcast({
-        type: 'threadCreated',
-        threadPreview: {
-          id: thread.id,
-          title: thread.title,
-          author: thread.author,
-          text: thread.text.slice(0, 200),
-          image: thread.image,
-          category: thread.category,
-          postCount: 0,
-          bumpAt: thread.bumpAt,
-          createdAt: thread.createdAt
-        }
-      });
-      ws.send(JSON.stringify({ type: 'threadCreated', success: true, threadId: thread.id }));
+        broadcast({ type: 'threadCreated', threadPreview: { id: thread.id, title: thread.title, author: thread.author, text: thread.text.slice(0, 200), image: thread.image, category: thread.category, postCount: 0, bumpAt: thread.bumpAt, createdAt: thread.createdAt } });
+        ws.send(JSON.stringify({ type: 'threadCreated', success: true, threadId: thread.id }));
+        console.log('✅ Тред создан:', thread.title);
+      } catch (e) {
+        console.error('Ошибка создания треда:', e);
+        ws.send(JSON.stringify({ type: 'threadCreated', success: false, error: 'Серверная ошибка' }));
+      }
     }
-
-    // ==== Создание поста ====
     else if (msg.type === 'createPost') {
       const client = clients.get(ws);
       const thread = getThreadById(msg.threadId);
       if (!thread) return;
       if (thread.posts.length >= MAX_POSTS_PER_THREAD) return;
-
       const isAuth = client && client.username && store.users[client.username]?.token === client.token;
       const authorName = isAuth ? client.username : (msg.name?.trim() || 'Аноним');
       const text = msg.text?.trim() || '';
       const image = msg.image || null;
-
-      const post = {
-        id: store.nextPostId++,
-        author: authorName,
-        text,
-        image,
-        createdAt: Date.now()
-      };
+      const post = { id: store.nextPostId++, author: authorName, text, image, createdAt: Date.now() };
       thread.posts.push(post);
       if (thread.posts.length <= THREAD_BUMP_LIMIT) bumpThread(thread);
       cleanOldThreads();
       saveData();
-
-      broadcast({
-        type: 'postAdded',
-        threadId: thread.id,
-        post: post
-      });
+      broadcast({ type: 'postAdded', threadId: thread.id, post });
       ws.send(JSON.stringify({ type: 'postCreated', success: true, postId: post.id }));
     }
-
-    // ==== Запросы данных ====
     else if (msg.type === 'getThreads') {
       const category = msg.category;
-      const filtered = category && category !== 'all'
-        ? store.threads.filter(t => t.category === category)
-        : store.threads;
-      ws.send(JSON.stringify({
-        type: 'threadsList',
-        threads: filtered.map(t => ({
-          id: t.id,
-          title: t.title,
-          author: t.author,
-          text: t.text.slice(0, 200),
-          image: t.image,
-          category: t.category,
-          postCount: t.posts.length,
-          bumpAt: t.bumpAt,
-          createdAt: t.createdAt
-        }))
-      }));
+      const filtered = category && category !== 'all' ? store.threads.filter(t => t.category === category) : store.threads;
+      ws.send(JSON.stringify({ type: 'threadsList', threads: filtered.map(t => ({
+        id: t.id, title: t.title, author: t.author, text: t.text.slice(0, 200), image: t.image, category: t.category, postCount: t.posts.length, bumpAt: t.bumpAt, createdAt: t.createdAt
+      })) }));
     }
     else if (msg.type === 'getThread') {
       const thread = getThreadById(msg.threadId);
@@ -242,45 +163,24 @@ wss.on('connection', (ws) => {
       const threads = store.threads.filter(t => t.author === username || t.posts.some(p => p.author === username));
       const profile = {
         username,
-        threads: threads.map(t => ({
-          id: t.id,
-          title: t.title,
-          category: t.category,
-          postCount: t.posts.length,
-          bumpAt: t.bumpAt
-        })),
-        postsCount: store.threads.reduce((count, t) => {
-          return count + t.posts.filter(p => p.author === username).length + (t.author === username ? 1 : 0);
-        }, 0)
+        threads: threads.map(t => ({ id: t.id, title: t.title, category: t.category, postCount: t.posts.length, bumpAt: t.bumpAt })),
+        postsCount: store.threads.reduce((count, t) => count + t.posts.filter(p => p.author === username).length + (t.author === username ? 1 : 0), 0)
       };
       ws.send(JSON.stringify({ type: 'profileData', profile }));
     }
   });
-
-  ws.on('close', () => {
-    clients.delete(ws);
-  });
+  ws.on('close', () => clients.delete(ws));
 });
 
 // ================== HTTP СЕРВЕР ==================
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
-  const method = req.method;
-
-  if (method === 'GET') {
-    if (pathname === '/' || pathname === '/index.html') {
-      return serveIndex(res);
-    }
-    if (pathname.startsWith('/uploads/')) {
-      return serveUpload(pathname, res);
-    }
+  if (req.method === 'GET') {
+    if (pathname === '/' || pathname === '/index.html') return serveIndex(res);
+    if (pathname.startsWith('/uploads/')) return serveUpload(pathname, res);
   }
-
-  if (method === 'POST' && pathname === '/api/upload') {
-    return handleFileUpload(req, res);
-  }
-
+  if (req.method === 'POST' && pathname === '/api/upload') return handleFileUpload(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Not Found');
 });
@@ -293,32 +193,20 @@ function serveIndex(res) {
 function serveUpload(pathname, res) {
   const fileName = pathname.replace('/uploads/', '');
   const filePath = path.join(UPLOAD_DIR, fileName);
-  if (!fs.existsSync(filePath)) {
-    res.writeHead(404);
-    return res.end('File not found');
-  }
+  if (!fs.existsSync(filePath)) { res.writeHead(404); return res.end('File not found'); }
   const ext = path.extname(fileName).toLowerCase();
-  const mimeTypes = {
-    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-    '.gif': 'image/gif', '.webp': 'image/webp'
-  };
+  const mimeTypes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
   res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
   fs.createReadStream(filePath).pipe(res);
 }
 
 function handleFileUpload(req, res) {
-  const form = new formidable.IncomingForm({
-    uploadDir: UPLOAD_DIR,
-    keepExtensions: true,
-    maxFileSize: 10 * 1024 * 1024,
-    filter: ({ mimetype }) => mimetype && mimetype.startsWith('image/')
-  });
-
+  const form = new formidable.IncomingForm({ uploadDir: UPLOAD_DIR, keepExtensions: true, maxFileSize: 10 * 1024 * 1024, filter: ({ mimetype }) => mimetype && mimetype.startsWith('image/') });
   form.parse(req, (err, fields, files) => {
     if (err) {
+      console.error('Ошибка загрузки файла:', err);
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Ошибка загрузки' }));
-      return;
+      return res.end(JSON.stringify({ error: 'Ошибка загрузки' }));
     }
     const imageFile = files.image;
     if (!imageFile || imageFile.size === 0) {
@@ -326,13 +214,20 @@ function handleFileUpload(req, res) {
     }
     const ext = path.extname(imageFile.originalFilename) || '.jpg';
     const imageName = `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
-    fs.renameSync(imageFile.filepath, path.join(UPLOAD_DIR, imageName));
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ image: imageName }));
+    try {
+      fs.renameSync(imageFile.filepath, path.join(UPLOAD_DIR, imageName));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ image: imageName }));
+      console.log('📸 Файл сохранён:', imageName);
+    } catch (e) {
+      console.error('Не удалось сохранить файл:', e);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Ошибка сохранения файла' }));
+    }
   });
 }
 
-// ================== HTML (улучшенный интерфейс) ==================
+// ================== HTML (с усиленной обратной связью) ==================
 function getIndexHTML() {
   return `<!DOCTYPE html>
 <html lang="ru">
@@ -382,10 +277,7 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 }
 .header p { color: var(--text-dim); font-size: 0.9rem; margin-top: 8px; }
 .auth-area { position: absolute; right: 20px; top: 20px; display: flex; gap: 10px; align-items: center; }
-.connection-status {
-  display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: red;
-  margin-right: 5px;
-}
+.connection-status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: red; margin-right: 5px; }
 .connection-status.online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
 .neon-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -399,11 +291,7 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 .neon-btn.green { border-color: var(--neon-green); color: var(--neon-green); }
 .neon-btn.green:hover { box-shadow: 0 0 18px var(--neon-green); background: rgba(0,255,0,0.1); }
 
-/* Табы категорий */
-.tabs {
-  display: flex; gap: 0; margin-bottom: 20px;
-  border-bottom: 2px solid var(--border);
-}
+.tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
 .tab-cat {
   padding: 12px 30px; cursor: pointer; color: var(--text-dim);
   font-weight: 500; text-transform: uppercase; letter-spacing: 1px;
@@ -413,13 +301,8 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 .tab-cat.active { color: var(--neon-cyan); border-bottom-color: var(--neon-cyan); }
 .tab-cat:hover { color: #fff; }
 
-/* Кнопка создать */
-.create-btn-wrapper {
-  display: flex; justify-content: flex-end;
-  margin-bottom: 20px;
-}
+.create-btn-wrapper { display: flex; justify-content: flex-end; margin-bottom: 20px; }
 
-/* Список тредов */
 .thread-list { display: flex; flex-direction: column; gap: 20px; }
 .thread-preview {
   background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
@@ -444,7 +327,6 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 .post-text { white-space: pre-wrap; word-break: break-word; }
 .back-btn { margin-bottom: 20px; display: inline-block; }
 
-/* Модальные окна */
 .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; z-index: 1000; }
 .modal.active { display: flex; }
 .modal-content { background: var(--bg); border: 2px solid var(--neon-cyan); border-radius: 12px; padding: 30px; width: 500px; max-width: 90vw; position: relative; max-height: 90vh; overflow-y: auto; }
@@ -453,24 +335,16 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 .tab-btn { color: var(--text-dim); cursor: pointer; padding-bottom: 5px; }
 .tab-btn.active { color: var(--neon-cyan); border-bottom: 2px solid var(--neon-cyan); }
 
-/* Поля формы */
-.form-card {
-  background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
-  padding: 25px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
+.form-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 25px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
 .form-title { font-size: 1.4rem; margin-bottom: 20px; color: var(--neon-cyan); border-left: 4px solid var(--neon-magenta); padding-left: 12px; }
 .field { margin-bottom: 15px; }
 .field label { display: block; margin-bottom: 5px; color: var(--text-dim); font-size: 0.9rem; }
-.field input, .field textarea {
-  width: 100%; padding: 10px 15px; background: #0a0a18; border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text); font-family: inherit; font-size: 0.95rem; outline: none;
-}
+.field input, .field textarea { width: 100%; padding: 10px 15px; background: #0a0a18; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: inherit; font-size: 0.95rem; outline: none; }
 .field input:focus, .field textarea:focus { border-color: var(--neon-cyan); box-shadow: 0 0 12px rgba(0,255,255,0.4); }
 .file-upload { position: relative; display: inline-block; cursor: pointer; }
 .file-upload input[type="file"] { position: absolute; left:0; top:0; opacity:0; width:100%; height:100%; cursor: pointer; }
 .image-preview { max-width: 150px; max-height: 150px; margin-top: 10px; display: none; border: 1px solid var(--border); border-radius: 6px; }
 
-/* Toast */
 .toast {
   position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
   background: var(--card-bg); border: 1px solid var(--neon-green);
@@ -479,6 +353,7 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
   display: none;
 }
 .toast.show { display: block; animation: fadeInOut 3s forwards; }
+.toast.error { border-color: red; color: red; }
 @keyframes fadeInOut {
   0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
   10% { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -493,7 +368,7 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 
 <div class="header">
   <h1>TKK Forum</h1>
-  <p>Треды и Гайды в неоновом стиле</p>
+  <p>Треды и Гайды (отладка включена)</p>
   <div class="auth-area" id="auth-area">
     <span id="conn-status" class="connection-status" title="Подключение к серверу"></span>
     <button class="neon-btn" id="show-login-btn">Вход</button>
@@ -506,36 +381,31 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
   </div>
 </div>
 
-<!-- Табы выбора категории -->
 <div class="tabs">
   <div class="tab-cat active" data-cat="all">Все</div>
   <div class="tab-cat" data-cat="text">Треды</div>
   <div class="tab-cat" data-cat="guide">Гайды</div>
 </div>
 
-<!-- Кнопка создания треда -->
 <div class="create-btn-wrapper">
   <button class="neon-btn green" id="open-create-modal">+ Создать тред / гайд</button>
 </div>
 
-<!-- Основной контент -->
 <div id="main-page">
   <div class="thread-list" id="thread-list"></div>
 </div>
 
-<!-- Просмотр треда -->
 <div class="thread-view" id="thread-view">
   <button class="neon-btn back-btn" id="back-from-thread">← Назад</button>
   <div id="thread-detail"></div>
 </div>
 
-<!-- Профиль -->
 <div id="profile-page" style="display:none">
   <button class="neon-btn back-btn" id="back-from-profile">← На главную</button>
   <div id="profile-content"></div>
 </div>
 
-<!-- Модалка авторизации -->
+<!-- Модалки -->
 <div class="modal" id="auth-modal">
   <div class="modal-content">
     <span class="close-modal" id="close-auth-modal">&times;</span>
@@ -558,7 +428,6 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
   </div>
 </div>
 
-<!-- Модалка создания треда -->
 <div class="modal" id="create-modal">
   <div class="modal-content">
     <span class="close-modal" id="close-create-modal">&times;</span>
@@ -586,98 +455,85 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 </div>
 
 <script>
-// ================== КЛИЕНТ ==================
-let ws;
-let currentUser = null;
-let token = null;
-let pendingMessages = [];
-let currentCategory = 'all';
+console.log('Скрипт запущен');
+let ws, currentUser = null, token = null, pendingMessages = [], currentCategory = 'all';
 
 function connectWebSocket() {
   ws = new WebSocket('ws://' + location.host);
   const connStatus = document.getElementById('conn-status');
 
   ws.onopen = () => {
+    console.log('✅ WebSocket открыт');
     connStatus.classList.add('online');
-    pendingMessages.forEach(msg => ws.send(msg));
+    pendingMessages.forEach(msg => { console.log('📤 Отправка очереди'); ws.send(msg); });
     pendingMessages = [];
     const saved = JSON.parse(sessionStorage.getItem('tkkSession'));
     if (saved) safeSend({ type: 'restoreSession', username: saved.username, token: saved.token });
     loadThreads();
   };
-
-  ws.onclose = () => {
-    connStatus.classList.remove('online');
-    setTimeout(connectWebSocket, 2000);
-  };
-
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    switch (msg.type) {
-      case 'authSuccess':
-        currentUser = msg.username;
-        token = msg.token;
-        sessionStorage.setItem('tkkSession', JSON.stringify({ username: currentUser, token }));
-        updateAuthUI();
-        document.getElementById('auth-modal').classList.remove('active');
+  ws.onclose = () => { console.warn('❌ WebSocket закрыт'); connStatus.classList.remove('online'); setTimeout(connectWebSocket, 2000); };
+  ws.onerror = (e) => console.error('WebSocket ошибка');
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    console.log('📨 Клиент получил:', msg.type);
+    if (msg.type === 'authSuccess') {
+      currentUser = msg.username; token = msg.token;
+      sessionStorage.setItem('tkkSession', JSON.stringify({ username: currentUser, token }));
+      updateAuthUI();
+      document.getElementById('auth-modal').classList.remove('active');
+      loadThreads();
+    } else if (msg.type === 'regSuccess') {
+      showToast('✅ Вы успешно зарегистрированы!', false);
+    } else if (msg.type === 'authError') {
+      document.getElementById('login-error').textContent = msg.message;
+    } else if (msg.type === 'regError') {
+      document.getElementById('reg-error').textContent = msg.message;
+    } else if (msg.type === 'threadsList') {
+      renderThreadList(msg.threads);
+    } else if (msg.type === 'threadCreated') {
+      if (msg.success) {
+        showToast('✅ Тред опубликован!', false);
+        document.getElementById('create-modal').classList.remove('active');
+        document.getElementById('thread-title').value = '';
+        document.getElementById('thread-name').value = '';
+        document.getElementById('thread-text').value = '';
+        document.getElementById('thread-image').value = '';
+        document.getElementById('thread-image-preview').style.display = 'none';
         loadThreads();
-        break;
-      case 'regSuccess':
-        showToast('✅ Вы успешно зарегистрированы!');
-        break;
-      case 'authError':
-        document.getElementById('login-error').textContent = msg.message;
-        break;
-      case 'regError':
-        document.getElementById('reg-error').textContent = msg.message;
-        break;
-      case 'threadsList':
-        renderThreadList(msg.threads);
-        break;
-      case 'threadCreated':
-        if (msg.success) {
-          document.getElementById('create-modal').classList.remove('active');
-          document.getElementById('thread-title').value = '';
-          document.getElementById('thread-name').value = '';
-          document.getElementById('thread-text').value = '';
-          document.getElementById('thread-image').value = '';
-          document.getElementById('thread-image-preview').style.display = 'none';
-          loadThreads();
-        }
-        break;
-      case 'threadDetail':
-        renderThread(msg.thread);
-        break;
-      case 'postAdded':
-        if (currentThreadId === msg.threadId) loadThread(currentThreadId);
-        loadThreads();
-        break;
-      case 'profileData':
-        renderProfile(msg.profile);
-        break;
+      } else {
+        showToast('❌ Ошибка при создании треда', true);
+        document.getElementById('thread-error').textContent = msg.error || 'Неизвестная ошибка';
+      }
+    } else if (msg.type === 'threadDetail') {
+      renderThread(msg.thread);
+    } else if (msg.type === 'postAdded') {
+      if (currentThreadId === msg.threadId) loadThread(currentThreadId);
+      loadThreads();
+    } else if (msg.type === 'profileData') {
+      renderProfile(msg.profile);
     }
   };
-
-  ws.onerror = () => connStatus.classList.remove('online');
 }
 
 function safeSend(obj) {
-  const message = JSON.stringify(obj);
+  console.log('📤 safeSend', obj.type, 'readyState:', ws?.readyState);
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(message);
+    ws.send(JSON.stringify(obj));
   } else {
-    pendingMessages.push(message);
+    console.warn('⏳ WebSocket не готов, очередь');
+    pendingMessages.push(JSON.stringify(obj));
   }
 }
 
-function showToast(text) {
+function showToast(text, isError = false) {
   const toast = document.getElementById('toast');
   toast.textContent = text;
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 3000);
+  if (isError) toast.classList.add('error'); else toast.classList.remove('error');
+  setTimeout(() => { toast.classList.remove('show', 'error'); }, 3000);
 }
 
-// UI элементы
+// UI
 const authArea = document.getElementById('auth-area');
 const userArea = document.getElementById('user-area');
 const usernameDisplay = document.getElementById('username-display');
@@ -701,7 +557,7 @@ const threadDetailDiv = document.getElementById('thread-detail');
 const backFromThread = document.getElementById('back-from-thread');
 const backFromProfile = document.getElementById('back-from-profile');
 
-// Табы категорий
+// Табы
 document.querySelectorAll('.tab-cat').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab-cat').forEach(t => t.classList.remove('active'));
@@ -711,36 +567,23 @@ document.querySelectorAll('.tab-cat').forEach(tab => {
   });
 });
 
-// Модалка создания
+// Создание треда
 const createModal = document.getElementById('create-modal');
-const openCreateModalBtn = document.getElementById('open-create-modal');
-const closeCreateModalBtn = document.getElementById('close-create-modal');
-const threadCategory = document.getElementById('thread-category');
-const threadTitle = document.getElementById('thread-title');
-const threadName = document.getElementById('thread-name');
-const threadText = document.getElementById('thread-text');
-const threadImage = document.getElementById('thread-image');
-const threadImagePreview = document.getElementById('thread-image-preview');
-const threadError = document.getElementById('thread-error');
-const createThreadBtn = document.getElementById('create-thread-btn');
-
-openCreateModalBtn.onclick = () => {
-  // Установить имя, если авторизован
+document.getElementById('open-create-modal').onclick = () => {
   if (currentUser) {
-    threadName.value = currentUser;
-    threadName.disabled = true;
+    document.getElementById('thread-name').value = currentUser;
+    document.getElementById('thread-name').disabled = true;
   } else {
-    threadName.value = '';
-    threadName.disabled = false;
+    document.getElementById('thread-name').value = '';
+    document.getElementById('thread-name').disabled = false;
   }
   createModal.classList.add('active');
 };
+document.getElementById('close-create-modal').onclick = () => createModal.classList.remove('active');
 
-closeCreateModalBtn.onclick = () => createModal.classList.remove('active');
-
-threadImage.onchange = (e) => {
+document.getElementById('thread-image').onchange = (e) => {
   const file = e.target.files[0];
-  const preview = threadImagePreview;
+  const preview = document.getElementById('thread-image-preview');
   if (file) {
     const reader = new FileReader();
     reader.onload = (ev) => { preview.src = ev.target.result; preview.style.display = 'block'; };
@@ -748,48 +591,55 @@ threadImage.onchange = (e) => {
   } else preview.style.display = 'none';
 };
 
-createThreadBtn.onclick = async () => {
-  const title = threadTitle.value.trim();
-  const name = currentUser ? currentUser : (threadName.value.trim() || 'Аноним');
-  const text = threadText.value.trim();
-  const category = threadCategory.value;
+document.getElementById('create-thread-btn').onclick = async () => {
+  const title = document.getElementById('thread-title').value.trim();
+  const name = currentUser ? currentUser : (document.getElementById('thread-name').value.trim() || 'Аноним');
+  const text = document.getElementById('thread-text').value.trim();
+  const category = document.getElementById('thread-category').value;
+  const errorDiv = document.getElementById('thread-error');
+
   if (!title && !text) {
-    threadError.textContent = 'Введите заголовок или текст';
+    errorDiv.textContent = 'Введите заголовок или текст';
     return;
   }
+  errorDiv.textContent = '';
+  console.log('Начинаю создание треда...');
+
   let image = null;
-  if (threadImage.files.length > 0) {
-    const formData = new FormData();
-    formData.append('image', threadImage.files[0]);
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    const json = await res.json();
-    image = json.image;
+  const imageInput = document.getElementById('thread-image');
+  if (imageInput.files.length > 0) {
+    try {
+      const formData = new FormData();
+      formData.append('image', imageInput.files[0]);
+      console.log('Загружаю изображение...');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      image = json.image;
+      console.log('Изображение загружено:', image);
+    } catch (err) {
+      console.error('Ошибка загрузки изображения:', err);
+      errorDiv.textContent = 'Ошибка загрузки изображения: ' + err.message;
+      return;
+    }
   }
+
   safeSend({ type: 'createThread', title, name, text, image, category, token });
-  threadError.textContent = '';
+  // Показываем, что отправлено
+  errorDiv.textContent = 'Отправка...';
 };
 
 // Авторизация
-document.getElementById('show-login-btn').onclick = () => {
-  authModal.classList.add('active');
-  tabLogin.click();
-};
-document.getElementById('show-register-btn').onclick = () => {
-  authModal.classList.add('active');
-  tabRegister.click();
-};
+document.getElementById('show-login-btn').onclick = () => { authModal.classList.add('active'); tabLogin.click(); };
+document.getElementById('show-register-btn').onclick = () => { authModal.classList.add('active'); tabRegister.click(); };
 closeAuthModal.onclick = () => authModal.classList.remove('active');
 tabLogin.onclick = () => {
-  tabLogin.classList.add('active');
-  tabRegister.classList.remove('active');
-  loginForm.style.display = 'block';
-  registerForm.style.display = 'none';
+  tabLogin.classList.add('active'); tabRegister.classList.remove('active');
+  loginForm.style.display = 'block'; registerForm.style.display = 'none';
 };
 tabRegister.onclick = () => {
-  tabRegister.classList.add('active');
-  tabLogin.classList.remove('active');
-  registerForm.style.display = 'block';
-  loginForm.style.display = 'none';
+  tabRegister.classList.add('active'); tabLogin.classList.remove('active');
+  registerForm.style.display = 'block'; loginForm.style.display = 'none';
 };
 loginSubmit.onclick = () => {
   const u = document.getElementById('login-username').value.trim();
@@ -806,172 +656,71 @@ registerSubmit.onclick = () => {
   regError.textContent = '';
 };
 
-// Профиль
-profileBtn.onclick = () => {
-  if (currentUser) safeSend({ type: 'getProfile', username: currentUser });
-};
+profileBtn.onclick = () => { if (currentUser) safeSend({ type: 'getProfile', username: currentUser }); };
 function renderProfile(profile) {
-  mainPage.style.display = 'none';
-  threadView.style.display = 'none';
-  profilePage.style.display = 'block';
+  mainPage.style.display = 'none'; threadView.style.display = 'none'; profilePage.style.display = 'block';
   document.getElementById('profile-content').innerHTML = `
     <h2 style="color:var(--neon-cyan)">Профиль: ${esc(profile.username)}</h2>
     <p>Всего сообщений: ${profile.postsCount}</p>
     <h3 style="margin-top:20px; color:var(--neon-magenta)">Активность</h3>
-    ${profile.threads.map(t => `<div>#${t.id} <a href="#" onclick="openThread(${t.id})">${esc(t.title)}</a> (${t.category === 'guide' ? 'Гайд' : 'Тред'}, ${t.postCount} постов)</div>`).join('')}
+    ${profile.threads.map(t => `<div>#${t.id} <a href="#" onclick="openThread(${t.id})">${esc(t.title)}</a> (${t.category==='guide'?'Гайд':'Тред'}, ${t.postCount} постов)</div>`).join('')}
   `;
 }
 
-// Навигация
-backFromThread.onclick = () => {
-  threadView.style.display = 'none';
-  mainPage.style.display = 'block';
-  currentThreadId = null;
-};
-backFromProfile.onclick = () => {
-  profilePage.style.display = 'none';
-  mainPage.style.display = 'block';
-};
+backFromThread.onclick = () => { threadView.style.display = 'none'; mainPage.style.display = 'block'; currentThreadId = null; };
+backFromProfile.onclick = () => { profilePage.style.display = 'none'; mainPage.style.display = 'block'; };
 
-// Треды
-function loadThreads() {
-  safeSend({ type: 'getThreads', category: currentCategory });
-}
-
+function loadThreads() { safeSend({ type: 'getThreads', category: currentCategory }); }
 function renderThreadList(threads) {
   threadListDiv.innerHTML = threads.length === 0
     ? '<p style="color:var(--text-dim); text-align:center; padding:30px;">Здесь пока ничего нет. Создайте первый тред или гайд!</p>'
     : threads.map(t => {
         const imgTag = t.image ? `<img src="/uploads/${t.image}" class="thumb" loading="lazy">` : '';
         const catBadge = t.category === 'guide' ? ' [Гайд]' : ' [Тред]';
-        return `
-          <div class="thread-preview" data-id="${t.id}">
-            ${imgTag}
-            <div class="thread-info">
-              <div class="thread-title">${esc(t.title)}<span style="font-size:0.7rem; color:var(--neon-magenta);">${catBadge}</span></div>
-              <div class="thread-meta">
-                ${esc(t.author)} • ${new Date(t.bumpAt).toLocaleString()} • ${t.postCount} постов
-              </div>
-              <div class="thread-text">${esc(t.text)}</div>
-            </div>
-          </div>
-        `;
+        return `<div class="thread-preview" data-id="${t.id}">${imgTag}<div class="thread-info"><div class="thread-title">${esc(t.title)}<span style="font-size:0.7rem; color:var(--neon-magenta);">${catBadge}</span></div><div class="thread-meta">${esc(t.author)} • ${new Date(t.bumpAt).toLocaleString()} • ${t.postCount} постов</div><div class="thread-text">${esc(t.text)}</div></div></div>`;
       }).join('');
-
-  document.querySelectorAll('.thread-preview').forEach(el => {
-    el.addEventListener('click', () => openThread(parseInt(el.dataset.id)));
-  });
+  document.querySelectorAll('.thread-preview').forEach(el => el.addEventListener('click', () => openThread(parseInt(el.dataset.id))));
 }
 
 let currentThreadId = null;
-function openThread(id) {
-  currentThreadId = id;
-  safeSend({ type: 'getThread', threadId: id });
-}
-
+function openThread(id) { currentThreadId = id; safeSend({ type: 'getThread', threadId: id }); }
 function renderThread(thread) {
-  mainPage.style.display = 'none';
-  profilePage.style.display = 'none';
-  threadView.style.display = 'block';
-
-  let html = `
-    <div class="post">
-      <div class="post-header">
-        <span class="post-number">#${thread.id} (${thread.category === 'guide' ? 'Гайд' : 'Тред'})</span>
-        <span class="post-name">${esc(thread.author)}</span>
-        <span class="post-time">${new Date(thread.createdAt).toLocaleString()}</span>
-      </div>
-      <div class="post-text">${esc(thread.text)}</div>
-      ${thread.image ? `<img src="/uploads/${thread.image}" class="post-image" onclick="openImageModal(this.src)">` : ''}
-    </div>
-  `;
-
+  mainPage.style.display = 'none'; profilePage.style.display = 'none'; threadView.style.display = 'block';
+  let html = `<div class="post"><div class="post-header"><span class="post-number">#${thread.id} (${thread.category==='guide'?'Гайд':'Тред'})</span><span class="post-name">${esc(thread.author)}</span><span class="post-time">${new Date(thread.createdAt).toLocaleString()}</span></div><div class="post-text">${esc(thread.text)}</div>${thread.image ? `<img src="/uploads/${thread.image}" class="post-image" onclick="openImageModal(this.src)">` : ''}</div>`;
   thread.posts.forEach(post => {
-    html += `
-      <div class="post">
-        <div class="post-header">
-          <span class="post-number">#${post.id}</span>
-          <span class="post-name">${esc(post.author)}</span>
-          <span class="post-time">${new Date(post.createdAt).toLocaleString()}</span>
-        </div>
-        <div class="post-text">${esc(post.text)}</div>
-        ${post.image ? `<img src="/uploads/${post.image}" class="post-image" onclick="openImageModal(this.src)">` : ''}
-      </div>
-    `;
+    html += `<div class="post"><div class="post-header"><span class="post-number">#${post.id}</span><span class="post-name">${esc(post.author)}</span><span class="post-time">${new Date(post.createdAt).toLocaleString()}</span></div><div class="post-text">${esc(post.text)}</div>${post.image ? `<img src="/uploads/${post.image}" class="post-image" onclick="openImageModal(this.src)">` : ''}</div>`;
   });
-
-  html += `
-    <div class="form-card" style="margin-top:30px">
-      <div class="form-title">Ответить</div>
-      <div class="field"><input type="text" id="post-name" placeholder="Имя (для анонимов)" ${currentUser ? 'disabled value="'+currentUser+'"' : ''}></div>
-      <div class="field"><textarea id="post-text" rows="3" placeholder="Текст" maxlength="2000"></textarea></div>
-      <div class="field">
-        <label class="file-upload neon-btn">📎 Изображение <input type="file" id="post-image" accept="image/*"></label>
-        <img id="post-image-preview" class="image-preview">
-      </div>
-      <button class="neon-btn green" id="send-post-btn">Отправить</button>
-      <div style="color:red; margin-top:10px" id="post-error"></div>
-    </div>
-  `;
-
+  html += `<div class="form-card"><div class="form-title">Ответить</div><div class="field"><input type="text" id="post-name" placeholder="Имя (для анонимов)" ${currentUser?'disabled value="'+currentUser+'"':''}></div><div class="field"><textarea id="post-text" rows="3" placeholder="Текст" maxlength="2000"></textarea></div><div class="field"><label class="file-upload neon-btn">📎 Изображение <input type="file" id="post-image" accept="image/*"></label><img id="post-image-preview" class="image-preview"></div><button class="neon-btn green" id="send-post-btn">Отправить</button><div style="color:red; margin-top:10px" id="post-error"></div></div>`;
   threadDetailDiv.innerHTML = html;
   document.getElementById('send-post-btn').onclick = () => submitPost(thread.id);
   document.getElementById('post-image').onchange = (e) => {
-    const file = e.target.files[0];
-    const preview = document.getElementById('post-image-preview');
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => { preview.src = ev.target.result; preview.style.display = 'block'; };
-      reader.readAsDataURL(file);
-    } else preview.style.display = 'none';
+    const f = e.target.files[0], p = document.getElementById('post-image-preview');
+    if (f) { const r = new FileReader(); r.onload = (ev) => { p.src = ev.target.result; p.style.display='block'; }; r.readAsDataURL(f); } else p.style.display='none';
   };
 }
 
 async function submitPost(threadId) {
-  const name = currentUser ? currentUser : (document.getElementById('post-name').value.trim() || 'Аноним');
+  const name = currentUser || (document.getElementById('post-name').value.trim() || 'Аноним');
   const text = document.getElementById('post-text').value.trim();
-  const imageInput = document.getElementById('post-image');
-  if (!text && imageInput.files.length === 0) {
-    document.getElementById('post-error').textContent = 'Введите текст или прикрепите изображение';
-    return;
-  }
+  const imgInput = document.getElementById('post-image');
+  if (!text && imgInput.files.length===0) { document.getElementById('post-error').textContent='Введите текст или прикрепите изображение'; return; }
   let image = null;
-  if (imageInput.files.length > 0) {
-    const formData = new FormData();
-    formData.append('image', imageInput.files[0]);
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    const json = await res.json();
+  if (imgInput.files.length>0) {
+    const fd = new FormData(); fd.append('image', imgInput.files[0]);
+    const res = await fetch('/api/upload', { method:'POST', body:fd }); const json = await res.json();
     image = json.image;
   }
-  safeSend({ type: 'createPost', threadId, name, text, image, token });
-  document.getElementById('post-text').value = '';
-  imageInput.value = '';
-  document.getElementById('post-image-preview').style.display = 'none';
+  safeSend({ type:'createPost', threadId, name, text, image, token });
+  document.getElementById('post-text').value=''; imgInput.value=''; document.getElementById('post-image-preview').style.display='none';
 }
 
-logoutBtn.onclick = () => {
-  currentUser = null; token = null;
-  sessionStorage.removeItem('tkkSession');
-  updateAuthUI();
-  loadThreads();
-};
-
+logoutBtn.onclick = () => { currentUser=null; token=null; sessionStorage.removeItem('tkkSession'); updateAuthUI(); loadThreads(); };
 function updateAuthUI() {
-  if (currentUser) {
-    authArea.style.display = 'none';
-    userArea.style.display = 'flex';
-    usernameDisplay.textContent = currentUser;
-    if (document.getElementById('thread-name')) threadName.disabled = true;
-  } else {
-    authArea.style.display = 'flex';
-    userArea.style.display = 'none';
-    if (document.getElementById('thread-name')) threadName.disabled = false;
-  }
+  if (currentUser) { authArea.style.display='none'; userArea.style.display='flex'; usernameDisplay.textContent=currentUser; if(document.getElementById('thread-name')) document.getElementById('thread-name').disabled=true; }
+  else { authArea.style.display='flex'; userArea.style.display='none'; if(document.getElementById('thread-name')) document.getElementById('thread-name').disabled=false; }
 }
-
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// Запуск
 connectWebSocket();
 updateAuthUI();
 </script>
@@ -979,11 +728,7 @@ updateAuthUI();
 </html>`;
 }
 
-// ================== ПОДКЛЮЧЕНИЕ WS ==================
 server.on('upgrade', (request, socket, head) => {
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit('connection', ws, request);
-  });
+  wss.handleUpgrade(request, socket, head, (ws) => wss.emit('connection', ws, request));
 });
-
 server.listen(PORT, () => console.log(`TKK Forum запущен на http://localhost:${PORT}`));

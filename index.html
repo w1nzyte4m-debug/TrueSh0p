@@ -1,1064 +1,890 @@
-<!DOCTYPE html>
+*
+ * TrueShop - Web Edition
+ * Полнофункциональный интернет-магазин с чатами, онлайн-статусом и неоновым дизайном.
+ * Автор: TrueShop Dev
+ * Запуск: npm install ws && node trueshop.js
+ */
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const WebSocket = require('ws');
+
+// ================== ХРАНИЛИЩЕ ДАННЫХ ==================
+const DATA_FILE = 'data.json';
+
+let data = {
+  users: {},          // username -> { password, token, ... }
+  products: [],       // массив товаров
+  globalMessages: [], // последние 50 сообщений глобального чата
+  privateMessages: {} // roomId -> [{from, text, time}]
+};
+
+// Загрузка из файла
+try {
+  if (fs.existsSync(DATA_FILE)) {
+    const raw = fs.readFileSync(DATA_FILE, 'utf8');
+    data = JSON.parse(raw);
+  } else {
+    // Инициализация тестовыми данными
+    data.users['admin'] = { password: 'admin', token: null };
+    data.users['hacker'] = { password: '1234', token: null };
+    data.products.push({
+      id: generateId(),
+      name: 'Троян ShadowGhost',
+      description: 'Невидимый троян для удалённого доступа, обходит антивирусы.',
+      price: 499.99,
+      category: 'virus',
+      seller: 'admin',
+      createdAt: new Date().toISOString()
+    });
+    data.products.push({
+      id: generateId(),
+      name: 'Вирус-шифровальщик Crypton',
+      description: 'Шифрует файлы жертвы, требует выкуп в криптовалюте.',
+      price: 1299.50,
+      category: 'virus',
+      seller: 'hacker',
+      createdAt: new Date().toISOString()
+    });
+    data.products.push({
+      id: generateId(),
+      name: 'Рецепт борща по-хакерски',
+      description: 'Секретный рецепт борща с неоновой свёклой и чипсами.',
+      price: 9.99,
+      category: 'recipe',
+      seller: 'admin',
+      createdAt: new Date().toISOString()
+    });
+    data.products.push({
+      id: generateId(),
+      name: 'Пицца Киберпанк',
+      description: 'Рецепт пиццы с синей плесенью и светящимся соусом.',
+      price: 14.50,
+      category: 'recipe',
+      seller: 'hacker',
+      createdAt: new Date().toISOString()
+    });
+    saveData();
+  }
+} catch (e) {
+  console.error('Ошибка загрузки данных:', e);
+}
+
+function saveData() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    console.error('Ошибка сохранения:', e);
+  }
+}
+
+function generateId() {
+  return Math.random().toString(36).substr(2, 9);
+}
+
+// ================== HTTP СЕРВЕР ==================
+const server = http.createServer((req, res) => {
+  if (req.url === '/' || req.url === '/index.html') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(getHTML());
+  } else {
+    res.writeHead(404);
+    res.end('Not Found');
+  }
+});
+
+// ================== WEBSOCKET СЕРВЕР ==================
+const wss = new WebSocket.Server({ server });
+const onlineUsers = new Map(); // username -> WebSocket соединение
+
+function broadcastOnlineCount() {
+  const count = onlineUsers.size;
+  const msg = JSON.stringify({ type: 'onlineCount', count });
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg);
+    }
+  });
+}
+
+// Отправка сообщения конкретному пользователю (если онлайн)
+function sendToUser(username, messageObj) {
+  const ws = onlineUsers.get(username);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(messageObj));
+  }
+}
+
+// Рассылка глобального сообщения всем (включая сохранение)
+function broadcastGlobalMessage(msg) {
+  data.globalMessages.push(msg);
+  if (data.globalMessages.length > 100) data.globalMessages.shift();
+  saveData();
+
+  const payload = JSON.stringify({ type: 'globalMessage', message: msg });
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+    }
+  });
+}
+
+// Создание или получение комнаты приватного чата
+function getRoomId(user1, user2) {
+  return [user1, user2].sort().join('::');
+}
+
+function getOrCreatePrivateRoom(user1, user2) {
+  const roomId = getRoomId(user1, user2);
+  if (!data.privateMessages[roomId]) {
+    data.privateMessages[roomId] = [];
+  }
+  return roomId;
+}
+
+function sendPrivateMessage(roomId, from, text) {
+  const room = data.privateMessages[roomId];
+  if (!room) return;
+  const msg = { from, text, time: new Date().toISOString() };
+  room.push(msg);
+  saveData();
+
+  const payload = JSON.stringify({ type: 'privateMessage', roomId, message: msg });
+  const users = roomId.split('::');
+  users.forEach(username => {
+    sendToUser(username, { ...JSON.parse(payload), type: 'privateMessage' });
+  });
+}
+
+// Обработчик новых подключений
+wss.on('connection', (ws) => {
+  let currentUser = null;
+
+  ws.on('message', (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw);
+    } catch (e) {
+      return;
+    }
+
+    // Аутентификация
+    if (msg.type === 'auth') {
+      const { username, password } = msg;
+      const user = data.users[username];
+      if (user && user.password === password) {
+        // Генерируем токен (простой, демо)
+        user.token = generateId();
+        currentUser = username;
+        onlineUsers.set(username, ws);
+        broadcastOnlineCount();
+        ws.send(JSON.stringify({
+          type: 'authSuccess',
+          username,
+          token: user.token,
+          products: data.products,
+          globalMessages: data.globalMessages.slice(-50),
+          onlineCount: onlineUsers.size
+        }));
+        // Уведомление всем о новом онлайне (можно не рассылать, просто обновить счётчик)
+        broadcastOnlineCount();
+      } else {
+        ws.send(JSON.stringify({ type: 'authError', message: 'Неверный логин или пароль' }));
+      }
+    }
+    // Регистрация
+    else if (msg.type === 'register') {
+      const { username, password } = msg;
+      if (!username || !password) {
+        ws.send(JSON.stringify({ type: 'regError', message: 'Заполните все поля' }));
+      } else if (data.users[username]) {
+        ws.send(JSON.stringify({ type: 'regError', message: 'Пользователь уже существует' }));
+      } else {
+        data.users[username] = { password, token: null };
+        saveData();
+        ws.send(JSON.stringify({ type: 'regSuccess', message: 'Регистрация успешна' }));
+      }
+    }
+    // Добавление товара (требуется токен)
+    else if (msg.type === 'addProduct') {
+      if (!currentUser || data.users[currentUser]?.token !== msg.token) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Не авторизован' }));
+        return;
+      }
+      const { name, description, price, category } = msg;
+      if (!name || !description || isNaN(price) || !category) {
+        ws.send(JSON.stringify({ type: 'addProductError', message: 'Некорректные данные' }));
+        return;
+      }
+      const product = {
+        id: generateId(),
+        name,
+        description,
+        price: parseFloat(price),
+        category,
+        seller: currentUser,
+        createdAt: new Date().toISOString()
+      };
+      data.products.push(product);
+      saveData();
+      // Рассылаем новый товар всем
+      const broadcast = JSON.stringify({ type: 'newProduct', product });
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) client.send(broadcast);
+      });
+    }
+    // Глобальное сообщение (чат)
+    else if (msg.type === 'globalMessage') {
+      if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
+      broadcastGlobalMessage({
+        from: currentUser,
+        text: msg.text,
+        time: new Date().toISOString()
+      });
+    }
+    // Начать приватный чат (при покупке или запросе)
+    else if (msg.type === 'startPrivateChat') {
+      if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
+      const { withUser } = msg;  // продавец
+      const roomId = getOrCreatePrivateRoom(currentUser, withUser);
+      // Отправляем историю запросившему
+      const history = data.privateMessages[roomId] || [];
+      ws.send(JSON.stringify({
+        type: 'privateChatHistory',
+        roomId,
+        withUser,
+        messages: history
+      }));
+      // Если второй пользователь онлайн, ему тоже можно отправить уведомление
+      sendToUser(withUser, { type: 'privateChatOpened', roomId, withUser: currentUser });
+    }
+    // Приватное сообщение
+    else if (msg.type === 'privateMessage') {
+      if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
+      const { roomId, text } = msg;
+      sendPrivateMessage(roomId, currentUser, text);
+    }
+    // Отключение обрабатывается событием close
+  });
+
+  ws.on('close', () => {
+    if (currentUser) {
+      onlineUsers.delete(currentUser);
+      broadcastOnlineCount();
+    }
+  });
+});
+
+// ================== ФУНКЦИЯ ВОЗВРАТА HTML СТРАНИЦЫ ==================
+function getHTML() {
+  return `<!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TrueShop</title>
-    <style>
-        /* ===== БАЗОВЫЕ СТИЛИ (сжатые) ===== */
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b0b0e;color:#e0e0e0;min-height:100vh;display:flex;justify-content:center;padding:20px;background-image:radial-gradient(circle at 20% 50%,#1a1a2e 0%,#0b0b0e 80%)}
-        .container{max-width:1300px;width:100%;background:rgba(20,20,30,.85);backdrop-filter:blur(12px);border-radius:32px;padding:24px 28px;box-shadow:0 25px 60px rgba(0,0,0,.8);border:1px solid rgba(255,255,255,.04);display:flex;flex-direction:column;min-height:90vh}
-        .header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px;margin-bottom:28px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,.06)}
-        .logo{font-size:32px;font-weight:800;background:linear-gradient(135deg,#00d4ff,#7b2ffc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.5px;text-shadow:0 0 30px rgba(0,212,255,.15)}
-        .logo span{background:none;-webkit-text-fill-color:#fff}
-        .nav{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-        .nav a{color:#aaa;text-decoration:none;font-weight:500;font-size:14px;padding:8px 16px;border-radius:40px;transition:.25s;background:transparent;display:flex;align-items:center;gap:6px;cursor:pointer}
-        .nav a:hover{color:#fff;background:rgba(0,212,255,.08);transform:translateY(-2px)}
-        .nav .user-info{color:#888;font-size:14px;margin-left:6px;display:flex;align-items:center;gap:10px}
-        .nav .user-info b{color:#00d4ff}
-        .avatar-mini{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #00d4ff;cursor:pointer;background:#2a2a3a;display:flex;align-items:center;justify-content:center;font-size:16px;color:#aaa}
-        .avatar-mini:hover{transform:scale(1.08)}
-        .online-indicator{display:inline-flex;align-items:center;gap:6px;margin-right:12px;font-weight:600;font-size:14px;color:#aaa}
-        .online-dot{width:14px;height:14px;border-radius:50%;display:inline-block;transition:background .3s,box-shadow .3s}
-        .online-dot.online{background:#4caf50;box-shadow:0 0 12px rgba(76,175,80,.6);animation:pulse-green 2s infinite}
-        .online-dot.offline{background:#f44336;box-shadow:0 0 12px rgba(244,67,54,.6);animation:pulse-red 2s infinite}
-        @keyframes pulse-green{0%{box-shadow:0 0 0 0 rgba(76,175,80,.7)}70%{box-shadow:0 0 0 10px rgba(76,175,80,0)}100%{box-shadow:0 0 0 0 rgba(76,175,80,0)}}
-        @keyframes pulse-red{0%{box-shadow:0 0 0 0 rgba(244,67,54,.7)}70%{box-shadow:0 0 0 10px rgba(244,67,54,0)}100%{box-shadow:0 0 0 0 rgba(244,67,54,0)}}
-        .online-counter{display:inline-flex;align-items:center;gap:4px;font-size:14px;color:#aaa;margin-right:12px}
-        .online-counter .count{color:#00d4ff;font-weight:700}
-        .fade-in{animation:fadeIn .4s ease}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
-        .footer{margin-top:auto;padding:20px 0 10px;border-top:1px solid rgba(255,255,255,.06);text-align:center;color:#888;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:10px}
-        .footer img{max-width:150px;border-radius:12px;border:1px solid #2a2a3a}
-        /* === КАТАЛОГ === */
-        .search-bar{display:flex;align-items:center;background:#1a1a24;border-radius:60px;padding:4px 4px 4px 20px;border:1px solid #2a2a3a;transition:.3s;margin-bottom:12px;flex-wrap:wrap;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.3)}
-        .search-bar:focus-within{border-color:#00d4ff;box-shadow:0 0 30px rgba(0,212,255,.15);transform:scale(1.01)}
-        .search-bar input{flex:1;background:transparent;border:none;color:#fff;padding:14px 8px;font-size:16px;outline:none;min-width:120px}
-        .search-bar input::placeholder{color:#666}
-        .search-bar .search-icon{font-size:22px;color:#666;margin-right:6px}
-        .search-bar:focus-within .search-icon{color:#00d4ff}
-        .search-bar .btn-search{background:linear-gradient(135deg,#00d4ff,#7b2ffc);border:none;border-radius:40px;padding:12px 28px;color:#fff;font-weight:600;cursor:pointer;transition:.3s;box-shadow:0 0 15px rgba(0,212,255,.2)}
-        .search-bar .btn-search:hover{transform:scale(1.04);box-shadow:0 0 30px rgba(0,212,255,.4)}
-        .genre-chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 16px}
-        .genre-chip{padding:6px 18px;border-radius:40px;font-size:13px;font-weight:600;cursor:pointer;transition:.2s;border:2px solid transparent;background:#1e1e2e;color:#aaa;letter-spacing:.3px}
-        .genre-chip:hover{transform:scale(1.04)}
-        .genre-chip.active{border-color:#fff}
-        .genre-chip.услуги{background:#0d47a1;color:#90caf9}
-        .genre-chip.услуги.active{background:#1565c0;color:#fff;box-shadow:0 0 20px rgba(21,101,192,.4)}
-        .genre-chip.порошки{background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.3)}
-        .genre-chip.порошки.active{background:linear-gradient(135deg,#f093fb,#f5576c);box-shadow:0 0 30px rgba(245,87,108,.6);border-color:#fff}
-        .genre-chip.рецепты{background:#1b5e20;color:#a5d6a7}
-        .genre-chip.рецепты.active{background:#2e7d32;color:#fff;box-shadow:0 0 20px rgba(46,125,50,.4)}
-        .genre-chip.скрипты{background:#4a148c;color:#ce93d8}
-        .genre-chip.скрипты.active{background:#6a1b9a;color:#fff;box-shadow:0 0 20px rgba(106,27,154,.4)}
-        .genre-chip.оружие{background:#2e7d32;color:#a5d6a7}
-        .genre-chip.оружие.active{background:#388e3c;color:#fff;box-shadow:0 0 20px rgba(56,142,60,.4)}
-        .genre-chip.вирусы{background:#4a148c;color:#ce93d8}
-        .genre-chip.вирусы.active{background:#6a1b9a;color:#fff;box-shadow:0 0 20px rgba(106,27,154,.4)}
-        .genre-chip.all{background:#333;color:#ccc}
-        .genre-chip.all.active{background:#555;color:#fff;border-color:#00d4ff}
-        .genre-tag{display:inline-block;padding:2px 12px;border-radius:40px;font-size:11px;font-weight:600;text-transform:lowercase}
-        .genre-tag.услуги{background:#0d47a1;color:#90caf9}
-        .genre-tag.порошки{background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.2)}
-        .genre-tag.рецепты{background:#1b5e20;color:#a5d6a7}
-        .genre-tag.скрипты{background:#4a148c;color:#ce93d8}
-        .genre-tag.оружие{background:#2e7d32;color:#a5d6a7}
-        .genre-tag.вирусы{background:#4a148c;color:#ce93d8}
-        .section-header{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;margin:16px 0 20px}
-        .section-header h2{font-size:24px;font-weight:600;border-left:4px solid #00d4ff;padding-left:14px;margin:0;color:#fff;letter-spacing:-.3px}
-        .section-header .count{color:#888;font-size:14px}
-        .product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:25px;margin-top:10px}
-        .product-card{background:#181825;border-radius:24px;padding:18px;cursor:default;transition:.35s cubic-bezier(.25,.46,.45,.94);border:1px solid #2a2a3a;display:flex;flex-direction:column;position:relative;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.3)}
-        .product-card::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle at 30% 30%,rgba(0,212,255,.05),transparent 70%);opacity:0;transition:.5s;pointer-events:none}
-        .product-card:hover::before{opacity:1}
-        .product-card:hover{transform:translateY(-8px) scale(1.01);border-color:#00d4ff;box-shadow:0 16px 60px rgba(0,212,255,.12)}
-        .product-card img{width:100%;height:160px;object-fit:contain;background:#0a0a12;border-radius:16px;margin-bottom:12px;transition:.3s}
-        .product-card:hover img{transform:scale(1.02)}
-        .product-card h3{font-size:18px;margin-bottom:4px;color:#fff;font-weight:600;line-height:1.3}
-        .product-card .price{color:#4caf50;font-weight:700;font-size:19px}
-        .product-card .meta{color:#888;font-size:13px;margin:4px 0}
-        .product-card .genres{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
-        .product-card .delete-hint{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.7);padding:4px 8px;border-radius:20px;font-size:11px;color:#ff6f00;opacity:0;transition:.2s}
-        .product-card:hover .delete-hint{opacity:1}
-        .btn{display:inline-block;background:linear-gradient(135deg,#00d4ff,#7b2ffc);color:#fff;border:none;padding:8px 20px;border-radius:40px;font-weight:600;cursor:pointer;transition:.2s;font-size:14px;text-align:center;border:1px solid transparent}
-        .btn:hover{transform:scale(1.04);box-shadow:0 0 25px rgba(0,212,255,.3)}
-        .btn-danger{background:#d32f2f}
-        .btn-danger:hover{background:#b71c1c}
-        .btn-success{background:#2e7d32}
-        .btn-success:hover{background:#1b5e20}
-        .btn-secondary{background:#2a2a3a}
-        .btn-secondary:hover{background:#3a3a4a}
-        .btn-warning{background:#f9a825;color:#000}
-        .btn-warning:hover{background:#f57f17}
-        .badge-own{display:inline-block;background:#ff6f00;color:#fff;padding:4px 12px;border-radius:40px;font-size:12px;font-weight:600;text-transform:uppercase}
-        .auth-block{background:#151520;padding:32px;border-radius:28px;flex:1;min-width:280px;border:1px solid #2a2a3a;transition:.3s;box-shadow:0 8px 30px rgba(0,0,0,.4)}
-        .auth-block:hover{border-color:#00d4ff}
-        .auth-block h3{font-size:26px;margin-bottom:24px;color:#fff;font-weight:600}
-        .auth-block .form-group{position:relative}
-        .auth-block .form-group label{display:block;margin-bottom:6px;color:#aaa;font-weight:500}
-        .auth-block .form-group input{width:100%;padding:14px 16px 14px 44px;background:#0e0e18;border:1px solid #2a2a3a;color:#fff;border-radius:16px;font-size:15px;transition:.3s}
-        .auth-block .form-group input:focus{border-color:#00d4ff;outline:none;box-shadow:0 0 0 3px rgba(0,212,255,.1)}
-        .auth-block .form-group .input-icon{position:absolute;left:16px;top:44px;font-size:20px;color:#666;transition:.3s}
-        .auth-block .form-group input:focus+.input-icon,.auth-block .form-group input:focus~.input-icon{color:#00d4ff}
-        .auth-block .btn{width:100%;padding:14px;font-size:16px;margin-top:8px}
-        .form-group{margin-bottom:18px}
-        .form-group label{display:block;margin-bottom:6px;color:#ccc;font-weight:500;font-size:14px}
-        .form-group input,.form-group textarea,.form-group select{width:100%;padding:12px 16px;background:#0e0e18;border:1px solid #2a2a3a;color:#fff;border-radius:14px;font-size:15px;transition:.2s}
-        .form-group input:focus,.form-group textarea:focus{border-color:#00d4ff;outline:none;box-shadow:0 0 0 3px rgba(0,212,255,.1)}
-        .form-group input[type=file]{background:transparent;border:none;padding:0}
-        .form-group .genre-checkboxes{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
-        .form-group .genre-checkboxes label{display:inline-flex;align-items:center;gap:6px;color:#ccc;font-weight:400;cursor:pointer}
-        .form-group .genre-checkboxes input[type=checkbox]{width:auto;margin-right:4px}
-        .cart-table{width:100%;border-collapse:collapse;margin-top:15px;background:#0e0e18;border-radius:16px;overflow:hidden}
-        .cart-table th,.cart-table td{border:1px solid #2a2a3a;padding:14px;text-align:left}
-        .cart-table th{background:#181825;color:#aaa;font-weight:600}
-        .total{font-size:1.3em;font-weight:700;color:#fff;margin-top:15px}
-        .order-card{background:#151520;border:1px solid #2a2a3a;border-radius:18px;padding:18px;margin:12px 0;transition:.2s}
-        .order-card:hover{border-color:#00d4ff}
-        .order-card .status{font-weight:600}
-        .status-pending{color:#90caf9}
-        .status-shipped{color:#ffe082}
-        .status-completed{color:#81c784}
-        .status-cancelled{color:#ef9a9a}
-        .profile-avatar{width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid #00d4ff;background:#0e0e18;box-shadow:0 0 40px rgba(0,212,255,.15)}
-        .profile-header{display:flex;gap:30px;align-items:center;flex-wrap:wrap;margin-bottom:30px;background:#151520;padding:24px;border-radius:24px;border:1px solid #2a2a3a}
-        .profile-info .username{font-size:30px;font-weight:700;color:#fff}
-        .profile-info .email{color:#888}
-        .profile-info .password{color:#aaa}
-        .chat-container{max-width:800px;margin:0 auto}
-        .chat-messages{background:#0e0e18;border-radius:20px;padding:18px;max-height:400px;overflow-y:auto;margin-bottom:16px;border:1px solid #2a2a3a}
-        .chat-message{padding:10px 16px;margin:6px 0;border-radius:18px;background:#1e1e2e;color:#e0e0e0;max-width:80%;word-wrap:break-word}
-        .chat-message.system{background:#0d47a1;color:#90caf9;text-align:center;max-width:100%;margin:8px 0;border-radius:40px}
-        .chat-message.self{background:linear-gradient(135deg,#00d4ff,#7b2ffc);color:#fff;align-self:flex-end;margin-left:auto}
-        .chat-message .sender{font-weight:600;color:#00d4ff}
-        .chat-message .time{font-size:11px;color:#888;margin-left:12px}
-        .chat-input{display:flex;gap:12px}
-        .chat-input input{flex:1;padding:14px 20px;background:#0e0e18;border:1px solid #2a2a3a;color:#fff;border-radius:60px;font-size:14px}
-        .chat-input input:focus{border-color:#00d4ff;outline:none}
-        .chat-input button{padding:14px 28px}
-        .rules-container{max-width:700px;margin:0 auto;text-align:center}
-        .rules-container h1{font-size:32px;margin-bottom:20px}
-        .rules-container .rule-item{background:#151520;padding:24px;border-radius:20px;border:1px solid #2a2a3a;margin-bottom:20px;font-size:22px;font-weight:500;color:#fff}
-        .rules-container img{max-width:100%;border-radius:20px;border:1px solid #2a2a3a;margin-top:20px}
-        .add-product-form{background:#151520;padding:30px;border-radius:24px;border:1px solid #2a2a3a;max-width:700px;margin:0 auto}
-        .add-product-form .btn{padding:12px 30px;font-size:16px}
-        .game-hub{max-width:1000px;margin:0 auto}
-        .game-hub h2{font-size:28px;text-align:center;margin-bottom:30px;color:#fff}
-        .game-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:30px}
-        .game-card{background:#181825;border-radius:28px;padding:30px 20px;text-align:center;cursor:pointer;transition:.3s;border:1px solid #2a2a3a;box-shadow:0 4px 20px rgba(0,0,0,.3)}
-        .game-card:hover{transform:translateY(-10px) scale(1.02);border-color:#00d4ff;box-shadow:0 16px 60px rgba(0,212,255,.12)}
-        .game-card .icon{font-size:60px;margin-bottom:15px;display:block}
-        .game-card h3{font-size:22px;color:#fff;margin-bottom:8px}
-        .game-card p{color:#888;font-size:14px}
-        .game-container{max-width:600px;margin:0 auto;text-align:center;background:#151520;padding:30px;border-radius:28px;border:1px solid #2a2a3a;box-shadow:0 8px 30px rgba(0,0,0,.4)}
-        .game-container h2{font-size:28px;margin-bottom:20px;color:#fff}
-        .game-mode-selector{display:flex;gap:12px;justify-content:center;margin-bottom:20px}
-        .game-mode-selector button{padding:8px 24px;border-radius:40px;background:#2a2a3a;color:#aaa;border:2px solid transparent;cursor:pointer;transition:.2s;font-weight:600}
-        .game-mode-selector button.active{border-color:#00d4ff;background:#1a1a2a;color:#fff;box-shadow:0 0 20px rgba(0,212,255,.2)}
-        .game-mode-selector button:hover{transform:scale(1.05)}
-        .game-board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:340px;margin:20px auto}
-        .game-cell{aspect-ratio:1;background:#0e0e18;border-radius:16px;border:2px solid #2a2a3a;font-size:48px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.2s;color:#fff;text-shadow:0 0 20px rgba(0,212,255,.3)}
-        .game-cell:hover:not(.taken){background:#1a1a2a;border-color:#00d4ff;transform:scale(1.04)}
-        .game-cell.taken{cursor:default;opacity:.9}
-        .game-cell.x{color:#00d4ff}
-        .game-cell.o{color:#f5576c}
-        .game-status{font-size:20px;font-weight:600;margin:15px 0;color:#aaa}
-        .game-score{display:flex;justify-content:center;gap:30px;margin:15px 0;font-size:18px;color:#888}
-        .game-score .x-score{color:#00d4ff}
-        .game-score .o-score{color:#f5576c}
-        .game-score .draw-score{color:#f9a825}
-        .minesweeper-container{max-width:500px;margin:0 auto;text-align:center}
-        .minesweeper-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;padding:10px 20px;background:#151520;border-radius:16px;border:1px solid #2a2a3a}
-        .minesweeper-header span{font-size:20px;font-weight:600}
-        .minesweeper-board{display:grid;gap:4px;margin:0 auto;justify-content:center}
-        .minesweeper-cell{aspect-ratio:1;background:#1e1e2e;border-radius:6px;border:1px solid #2a2a3a;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s;color:#fff}
-        .minesweeper-cell:hover:not(.revealed){background:#2a2a3a;transform:scale(1.04)}
-        .minesweeper-cell.revealed{background:#0e0e18;cursor:default;border-color:#1a1a2a}
-        .minesweeper-cell.flagged{background:#0d47a1;color:#90caf9}
-        .minesweeper-cell.mine-exploded{background:#d32f2f;color:#fff}
-        .minesweeper-cell[data-value="1"]{color:#4caf50}
-        .minesweeper-cell[data-value="2"]{color:#f9a825}
-        .minesweeper-cell[data-value="3"]{color:#f44336}
-        .minesweeper-cell[data-value="4"]{color:#7b1fa2}
-        .minesweeper-cell[data-value="5"]{color:#f06292}
-        .minesweeper-cell[data-value="6"]{color:#00bcd4}
-        .minesweeper-cell[data-value="7"]{color:#fff}
-        .minesweeper-cell[data-value="8"]{color:#78909c}
-        .village-container{max-width:1000px;margin:0 auto;display:flex;flex-wrap:wrap;gap:30px;justify-content:center}
-        .village-resources{background:#151520;border-radius:20px;padding:20px;border:1px solid #2a2a3a;flex:1 1 280px}
-        .village-resources h3{margin-bottom:15px;color:#fff;font-size:20px;border-bottom:1px solid #2a2a3a;padding-bottom:10px}
-        .village-resources .res-item{display:flex;justify-content:space-between;padding:4px 0;font-size:15px}
-        .village-resources .res-item span:first-child{color:#aaa}
-        .village-resources .res-item span:last-child{font-weight:600;color:#fff}
-        .village-buildings{flex:2 1 500px;background:#151520;border-radius:20px;padding:20px;border:1px solid #2a2a3a;max-height:600px;overflow-y:auto}
-        .village-buildings h3{margin-bottom:15px;color:#fff;font-size:20px;border-bottom:1px solid #2a2a3a;padding-bottom:10px}
-        .building-item{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2a2a3a}
-        .building-item:last-child{border-bottom:none}
-        .building-item .info{color:#ccc;font-size:14px}
-        .building-item .info strong{color:#fff}
-        .building-item .btn{padding:4px 12px;font-size:13px}
-        .village-status{margin-top:15px;font-size:15px;color:#888}
-        .village-achievements{margin-top:15px;background:#1a1a2a;border-radius:12px;padding:12px;border:1px solid #2a2a3a}
-        .village-achievements h4{color:#00d4ff;margin-bottom:8px}
-        .village-achievements .ach-item{display:inline-block;background:#2a2a3a;padding:2px 10px;border-radius:20px;margin:3px;font-size:13px;color:#aaa}
-        .village-achievements .ach-item.unlocked{color:#4caf50;background:#1b5e20}
-        .ai-container{max-width:800px;margin:0 auto}
-        .ai-settings{background:#151520;padding:20px;border-radius:20px;border:1px solid #2a2a3a;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:15px;align-items:flex-end}
-        .ai-settings .form-group{flex:1;min-width:150px;margin-bottom:0}
-        .ai-settings .form-group label{color:#aaa;font-size:13px}
-        .ai-settings .form-group input,.ai-settings .form-group select{width:100%;padding:8px 12px;background:#0e0e18;border:1px solid #2a2a3a;color:#fff;border-radius:10px}
-        .ai-chat{background:#151520;border-radius:20px;border:1px solid #2a2a3a;padding:20px;height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
-        .ai-chat .msg{padding:10px 16px;border-radius:18px;max-width:80%;word-wrap:break-word}
-        .ai-chat .msg.user{background:#00d4ff;color:#fff;align-self:flex-end}
-        .ai-chat .msg.assistant{background:#2a2a3a;color:#e0e0e0;align-self:flex-start}
-        .ai-chat .msg.system-msg{background:#0d47a1;color:#90caf9;text-align:center;max-width:100%;margin:8px 0;border-radius:40px}
-        .ai-input{display:flex;gap:12px;margin-top:15px}
-        .ai-input input{flex:1;padding:12px 20px;background:#0e0e18;border:1px solid #2a2a3a;color:#fff;border-radius:60px;font-size:14px}
-        .ai-input input:focus{border-color:#00d4ff;outline:none}
-        .ai-input button{padding:12px 24px}
-        .paint-container{max-width:700px;margin:0 auto;text-align:center}
-        .paint-canvas-wrapper{background:#0e0e18;border-radius:20px;padding:10px;border:1px solid #2a2a3a;display:inline-block}
-        .paint-canvas-wrapper canvas{background:#fff;border-radius:12px;cursor:crosshair;display:block;width:100%;max-width:500px;height:auto;aspect-ratio:1/1}
-        .paint-tools{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:15px 0}
-        .paint-tools button{padding:6px 16px;border-radius:40px;background:#2a2a3a;border:none;color:#aaa;cursor:pointer;transition:.2s;font-weight:600}
-        .paint-tools button:hover{background:#3a3a4a;color:#fff}
-        .paint-tools button.active{background:#00d4ff;color:#fff}
-        .paint-guess{margin-top:15px;padding:15px;background:#151520;border-radius:16px;border:1px solid #2a2a3a}
-        .paint-guess .result{font-size:22px;font-weight:700;color:#4caf50}
-        .paint-guess .loading{color:#f9a825}
-        .global-chat-container{max-width:800px;margin:0 auto}
-        .global-chat-messages{background:#0e0e18;border-radius:20px;padding:18px;max-height:450px;overflow-y:auto;margin-bottom:16px;border:1px solid #2a2a3a}
-        .global-chat-msg{padding:6px 12px;margin:4px 0;border-radius:12px;background:#1e1e2e;color:#e0e0e0}
-        .global-chat-msg .sender{font-weight:600;color:#00d4ff}
-        .global-chat-msg .time{font-size:11px;color:#888;margin-left:12px}
-        .global-chat-msg.system-msg{background:#0d47a1;color:#90caf9;text-align:center}
-        .global-chat-input{display:flex;gap:12px;margin-top:15px}
-        .global-chat-input input{flex:1;padding:12px 20px;background:#0e0e18;border:1px solid #2a2a3a;color:#fff;border-radius:60px;font-size:14px}
-        .global-chat-input input:focus{border-color:#00d4ff;outline:none}
-        .global-chat-input button{padding:12px 24px}
-        .game-canvas-wrapper{display:flex;justify-content:center;margin:20px 0}
-        .game-canvas-wrapper canvas{background:#1a1a2a;border-radius:16px;border:2px solid #2a2a3a;max-width:100%}
-        .game-stats{display:flex;justify-content:center;gap:30px;margin:10px 0;font-size:18px;color:#aaa}
-        .game-stats span{font-weight:700;color:#fff}
-        .sea-board{display:inline-grid;grid-template-columns:repeat(10,30px);gap:2px;background:#0e0e18;padding:10px;border-radius:8px;border:1px solid #2a2a3a}
-        .sea-cell{width:30px;height:30px;background:#1a1a2a;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:.2s}
-        .sea-cell:hover{background:#2a2a3a}
-        .sea-cell.ship{background:#4caf50}
-        .sea-cell.hit{background:#f44336}
-        .sea-cell.miss{background:#555}
-        .sea-cell.ship-hit{background:#ff9800}
-        .sea-cell.disabled{pointer-events:none;opacity:.6}
-        .sea-cell.enemy{background:#1a1a2a}
-        .sea-cell.enemy.ship{background:#4caf50}
-        .sea-cell.enemy.hit{background:#f44336}
-        .sea-cell.enemy.miss{background:#555}
-        @media (max-width:700px){.header{flex-direction:column;align-items:stretch;gap:10px}.nav{justify-content:center}.product-grid{grid-template-columns:1fr}.profile-header{flex-direction:column;align-items:center;text-align:center}.search-bar{max-width:100%}.search-bar input{min-width:80px}.genre-chips{justify-content:center}.container{padding:16px}.game-grid{grid-template-columns:1fr}.village-container{flex-direction:column}.minesweeper-board{max-width:320px}.minesweeper-cell{font-size:14px}.game-board{max-width:260px;gap:8px}.game-cell{font-size:36px}.ai-settings{flex-direction:column}.paint-canvas-wrapper canvas{max-width:100%}.sea-board{grid-template-columns:repeat(10,24px)}.sea-cell{width:24px;height:24px}}
-        .reset-link{color:#00d4ff;cursor:pointer}
-        .reset-link:hover{text-decoration:underline}
-        .popup-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
-        .popup-box{background:#1a1a2a;padding:30px;border-radius:24px;max-width:420px;width:90%;border:1px solid #2a2a3a;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-        .popup-box .close-btn{float:right;cursor:pointer;color:#888;font-size:22px}
-        .popup-box .close-btn:hover{color:#fff}
-        .no-results{text-align:center;padding:40px 0;color:#666;font-size:18px}
-        .order-chat-link{display:inline-block;margin-top:8px}
-        .register-image img{width:100%;border-radius:16px;border:1px solid #2a2a3a}
-        .message{padding:12px;border-radius:12px}
-        .message.success{background:#1b5e20;color:#a5d6a7}
-        .message.error{background:#b71c1c;color:#ef9a9a}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrueShop | Неоновый маркет</title>
+<style>
+/* ========== ОБЩИЙ СБРОС И БАЗОВЫЕ ПЕРЕМЕННЫЕ ========== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0a0a14;
+  --card-bg: rgba(20,20,35,0.85);
+  --neon-cyan: #00ffff;
+  --neon-magenta: #ff00ff;
+  --neon-green: #00ff00;
+  --text: #e0e0e0;
+  --dark-text: #888;
+  --border-radius: 12px;
+}
+body {
+  background: var(--bg);
+  font-family: 'Courier New', monospace;
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Неоновая анимация мерцания */
+@keyframes neonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+@keyframes glowPulse {
+  0%, 100% { text-shadow: 0 0 7px var(--neon-cyan), 0 0 20px var(--neon-cyan); }
+  50% { text-shadow: 0 0 20px var(--neon-cyan), 0 0 35px var(--neon-cyan); }
+}
+@keyframes borderGlow {
+  0%, 100% { border-color: var(--neon-cyan); box-shadow: 0 0 5px var(--neon-cyan); }
+  50% { border-color: var(--neon-magenta); box-shadow: 0 0 15px var(--neon-magenta); }
+}
+
+/* Слой входа (оверлей) */
+#login-overlay {
+  position: fixed; top:0; left:0; width:100%; height:100%;
+  background: rgba(5,5,15,0.95);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999;
+}
+.login-box {
+  background: var(--card-bg);
+  border: 2px solid var(--neon-cyan);
+  border-radius: var(--border-radius);
+  padding: 3rem 2.5rem;
+  width: 380px;
+  box-shadow: 0 0 30px rgba(0,255,255,0.4);
+  animation: borderGlow 3s infinite alternate;
+}
+.login-box h1 {
+  text-align: center; font-size: 2.4rem; margin-bottom: 1.5rem;
+  color: var(--neon-cyan); animation: glowPulse 2s infinite;
+}
+.login-box input {
+  width: 100%; padding: 12px; margin: 8px 0;
+  background: #111122; border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan); border-radius: 5px;
+  font-family: inherit; font-size: 14px; outline: none;
+  transition: all 0.3s;
+}
+.login-box input:focus {
+  border-color: var(--neon-magenta);
+  box-shadow: 0 0 10px var(--neon-magenta);
+}
+.login-box button {
+  width: 100%; padding: 12px; margin-top: 15px;
+  background: transparent; border: 2px solid var(--neon-cyan);
+  color: var(--neon-cyan); font-weight: bold; font-size: 16px;
+  border-radius: 8px; cursor: pointer; transition: all 0.3s;
+  text-transform: uppercase; letter-spacing: 2px;
+}
+.login-box button:hover {
+  background: rgba(0,255,255,0.1);
+  box-shadow: 0 0 20px var(--neon-cyan);
+}
+.error-msg { color: #ff4444; font-size: 14px; text-align: center; margin-top: 10px; }
+.success-msg { color: #44ff44; text-align: center; margin-top: 10px; }
+
+/* ОСНОВНОЙ ЛЭЙАУТ */
+#app {
+  display: none; /* скрыто до авторизации */
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+}
+.top-bar {
+  background: #0f0f1e;
+  padding: 15px 25px;
+  display: flex; align-items: center; gap: 20px;
+  border-bottom: 1px solid #1a1a3a;
+  flex-wrap: wrap;
+}
+.top-bar .logo {
+  font-size: 1.8rem; font-weight: bold;
+  color: var(--neon-cyan); animation: glowPulse 2s infinite;
+}
+.search-box {
+  flex: 1; min-width: 200px;
+  background: #111122; border: 1px solid var(--neon-cyan);
+  padding: 8px 15px; border-radius: 5px; color: var(--neon-cyan);
+  font-family: inherit; font-size: 14px; outline: none;
+}
+.category-select {
+  background: #111122; border: 1px solid var(--neon-cyan);
+  padding: 8px; color: var(--neon-cyan); border-radius: 5px;
+  font-family: inherit; cursor: pointer;
+}
+.online-badge {
+  background: #1a1a3a; padding: 8px 16px; border-radius: 20px;
+  border: 1px solid var(--neon-green); color: var(--neon-green);
+  font-weight: bold; white-space: nowrap;
+}
+.btn {
+  background: transparent; border: 2px solid var(--neon-cyan);
+  color: var(--neon-cyan); padding: 8px 18px; border-radius: 6px;
+  cursor: pointer; font-weight: bold; transition: all 0.3s;
+  font-family: inherit; text-transform: uppercase;
+}
+.btn:hover { box-shadow: 0 0 15px var(--neon-cyan); }
+.btn.magenta { border-color: var(--neon-magenta); color: var(--neon-magenta); }
+.btn.magenta:hover { box-shadow: 0 0 15px var(--neon-magenta); }
+.btn.green { border-color: var(--neon-green); color: var(--neon-green); }
+.btn.green:hover { box-shadow: 0 0 15px var(--neon-green); }
+
+/* КОНТЕЙНЕР ТОВАРОВ */
+.product-grid {
+  flex: 1; overflow-y: auto; padding: 20px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+.product-card {
+  background: var(--card-bg);
+  border: 2px solid var(--neon-cyan);
+  border-radius: var(--border-radius);
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  animation: cardAppear 0.4s ease-out;
+}
+@keyframes cardAppear {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.product-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 0 30px rgba(0,255,255,0.5);
+}
+.product-card .name { font-size: 1.2rem; font-weight: bold; color: var(--neon-cyan); }
+.product-card .desc { font-size: 0.9rem; color: #aaa; flex: 1; }
+.product-card .price { font-size: 1.4rem; font-weight: bold; color: var(--neon-green); }
+.product-card .meta { font-size: 0.8rem; color: var(--dark-text); display: flex; justify-content: space-between; }
+.product-card .actions { display: flex; gap: 10px; margin-top: 5px; }
+
+/* МОДАЛЬНЫЕ ОКНА (глобальный чат, приватный чат, добавление товара) */
+.modal {
+  display: none; position: fixed; top:0; left:0; width:100%; height:100%;
+  background: rgba(0,0,0,0.7); justify-content: center; align-items: center;
+  z-index: 100;
+}
+.modal.active { display: flex; }
+.modal-content {
+  background: var(--bg);
+  border: 2px solid var(--neon-cyan);
+  border-radius: var(--border-radius);
+  width: 450px; max-width: 90vw; max-height: 80vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 0 40px rgba(0,255,255,0.5);
+}
+.modal-header {
+  padding: 15px 20px; border-bottom: 1px solid #1a1a3a;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.modal-header h3 { color: var(--neon-cyan); }
+.close-btn {
+  background: none; border: none; color: var(--neon-magenta);
+  font-size: 1.5rem; cursor: pointer;
+}
+.modal-body { flex: 1; overflow-y: auto; padding: 15px; }
+.modal-footer { padding: 10px; border-top: 1px solid #1a1a3a; display: flex; gap: 10px; }
+.modal-footer input {
+  flex: 1; background: #111122; border: 1px solid var(--neon-cyan);
+  padding: 8px; color: var(--neon-cyan); border-radius: 5px; font-family: inherit;
+}
+
+/* Сообщения чата */
+.chat-message { margin-bottom: 10px; }
+.chat-message .sender { font-weight: bold; color: var(--neon-magenta); }
+.chat-message .time { font-size: 0.7rem; color: #555; margin-left: 10px; }
+.chat-message .text { color: #ccc; word-wrap: break-word; }
+
+/* Адаптив */
+@media (max-width: 600px) {
+  .top-bar { flex-direction: column; align-items: stretch; }
+  .product-grid { grid-template-columns: 1fr; }
+}
+</style>
 </head>
 <body>
-<div class="container" id="app">
-    <div class="header">
-        <div class="logo">True<span>Shop</span></div>
-        <div class="nav">
-            <span class="online-indicator"><span class="online-dot online" id="onlineDot"></span><span id="onlineText" style="font-size:13px;">Онлайн</span></span>
-            <span class="online-counter"><span class="count" id="onlineCount">0</span> 👤</span>
-            <a onclick="showPage('catalog')"><i>🏠</i> Каталог</a>
-            <a onclick="showPage('cart')"><i>🛒</i> Корзина (<span id="cartCount">0</span>)</a>
-            <a onclick="showPage('myOrders')"><i>📦</i> Заказы</a>
-            <a onclick="showPage('chats')"><i>💬</i> Чаты</a>
-            <a onclick="showPage('globalChat')"><i>🌐</i> Общий чат</a>
-            <a onclick="showPage('rules')"><i>📋</i> Правила</a>
-            <a onclick="showPage('game')"><i>🎮</i> Игры</a>
-            <a onclick="showPage('ai')"><i>🤖</i> AI</a>
-            <span class="user-info" id="userInfo"></span>
-        </div>
+
+<!-- Оверлей входа -->
+<div id="login-overlay">
+  <div class="login-box">
+    <h1>TrueShop</h1>
+    <input type="text" id="login-username" placeholder="Логин">
+    <input type="password" id="login-password" placeholder="Пароль">
+    <button id="login-btn">Войти</button>
+    <button id="register-btn" class="btn magenta" style="margin-top:10px;">Регистрация</button>
+    <div id="login-error" class="error-msg"></div>
+    <div id="login-success" class="success-msg"></div>
+  </div>
+</div>
+
+<!-- Основное приложение (скрыто) -->
+<div id="app">
+  <div class="top-bar">
+    <div class="logo">TRUESHOP</div>
+    <input type="text" id="search-input" class="search-box" placeholder="Поиск товаров...">
+    <select id="category-filter" class="category-select">
+      <option value="all">Все категории</option>
+      <option value="virus">Вирусы</option>
+      <option value="recipe">Рецепты</option>
+    </select>
+    <div class="online-badge" id="online-count">0 онлайн</div>
+    <button id="global-chat-btn" class="btn">Глобальный чат</button>
+    <button id="add-product-btn" class="btn green">+ Товар</button>
+    <button id="logout-btn" class="btn magenta">Выйти</button>
+  </div>
+  <div class="product-grid" id="product-grid"></div>
+</div>
+
+<!-- Модалка глобального чата -->
+<div id="global-chat-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Глобальный чат</h3>
+      <button class="close-btn" id="close-global-chat">&times;</button>
     </div>
-    <div id="pageContent" class="fade-in"></div>
-    <div class="footer">
-        <div>На TrueShop можно продавать абсолютно всё без ограничений!</div>
-        <img src="https://img.freepik.com/free-photo/adorable-looking-kittens_23-2150886306.jpg?semt=ais_hybrid" alt="Котик">
+    <div class="modal-body" id="global-chat-messages"></div>
+    <div class="modal-footer">
+      <input type="text" id="global-chat-input" placeholder="Сообщение...">
+      <button id="send-global-btn" class="btn">Отпр.</button>
     </div>
+  </div>
+</div>
+
+<!-- Модалка приватного чата -->
+<div id="private-chat-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="private-chat-title">Чат с ...</h3>
+      <button class="close-btn" id="close-private-chat">&times;</button>
+    </div>
+    <div class="modal-body" id="private-chat-messages"></div>
+    <div class="modal-footer">
+      <input type="text" id="private-chat-input" placeholder="Сообщение...">
+      <button id="send-private-btn" class="btn">Отпр.</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модалка добавления товара -->
+<div id="add-product-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Новый товар</h3>
+      <button class="close-btn" id="close-add-product">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="text" id="new-product-name" placeholder="Название" style="width:100%; margin:5px 0; background:#111122; border:1px solid var(--neon-cyan); color:var(--neon-cyan); padding:8px; border-radius:5px;">
+      <textarea id="new-product-desc" placeholder="Описание" rows="4" style="width:100%; margin:5px 0; background:#111122; border:1px solid var(--neon-cyan); color:var(--neon-cyan); padding:8px; border-radius:5px;"></textarea>
+      <input type="number" id="new-product-price" placeholder="Цена (₿)" step="0.01" style="width:100%; margin:5px 0; background:#111122; border:1px solid var(--neon-cyan); color:var(--neon-cyan); padding:8px; border-radius:5px;">
+      <select id="new-product-category" class="category-select" style="width:100%; margin:5px 0;">
+        <option value="virus">Вирусы</option>
+        <option value="recipe">Рецепты</option>
+      </select>
+      <div id="add-product-error" style="color:red; font-size:14px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="submit-product-btn" class="btn green">Выложить</button>
+    </div>
+  </div>
 </div>
 
 <script>
-// ================================================================
-// НАСТРОЙКИ JSONBIN (ОБЯЗАТЕЛЬНО ЗАМЕНИТЕ НА СВОИ!)
-// ================================================================
-const BIN_ID = 'YOUR_BIN_ID';      // ← Вставьте ID вашего бина
-const API_KEY = 'YOUR_API_KEY';    // ← Вставьте ваш API-ключ
-const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
-const HEADERS = { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY };
+// ================== КЛИЕНТСКАЯ ЛОГИКА ==================
+let ws;
+let currentUser = null;
+let token = null;
+let products = [];
+let onlineCount = 0;
+let activePrivateRoom = null; // { roomId, withUser }
 
-// ================================================================
-// ГЛОБАЛЬНЫЕ ДАННЫЕ
-// ================================================================
-let data = { users: [], products: [], orders: [], chat: [], online: [] };
-let currentUser = { username: null, avatar: '' };
-const GENRES = ['услуги','порошки','рецепты','скрипты','оружие','вирусы'];
-const GENRE_EMOJI = { услуги:'🛠', порошки:'🧪', рецепты:'📜', скрипты:'💻', оружие:'🔫', вирусы:'🦠' };
-let searchQuery = '', selectedGenre = 'all';
+// DOM элементы
+const loginOverlay = document.getElementById('login-overlay');
+const appDiv = document.getElementById('app');
+const loginBtn = document.getElementById('login-btn');
+const registerBtn = document.getElementById('register-btn');
+const loginUsername = document.getElementById('login-username');
+const loginPassword = document.getElementById('login-password');
+const loginError = document.getElementById('login-error');
+const loginSuccess = document.getElementById('login-success');
 
-// ================================================================
-// РАБОТА С JSONBIN (исправлено: добавлены проверки и сообщения)
-// ================================================================
-async function loadData() {
+const searchInput = document.getElementById('search-input');
+const categoryFilter = document.getElementById('category-filter');
+const onlineCountEl = document.getElementById('online-count');
+const productGrid = document.getElementById('product-grid');
+const logoutBtn = document.getElementById('logout-btn');
+const globalChatBtn = document.getElementById('global-chat-btn');
+const addProductBtn = document.getElementById('add-product-btn');
+
+const globalChatModal = document.getElementById('global-chat-modal');
+const closeGlobalChat = document.getElementById('close-global-chat');
+const globalChatMessages = document.getElementById('global-chat-messages');
+const globalChatInput = document.getElementById('global-chat-input');
+const sendGlobalBtn = document.getElementById('send-global-btn');
+
+const privateChatModal = document.getElementById('private-chat-modal');
+const closePrivateChat = document.getElementById('close-private-chat');
+const privateChatTitle = document.getElementById('private-chat-title');
+const privateChatMessages = document.getElementById('private-chat-messages');
+const privateChatInput = document.getElementById('private-chat-input');
+const sendPrivateBtn = document.getElementById('send-private-btn');
+
+const addProductModal = document.getElementById('add-product-modal');
+const closeAddProduct = document.getElementById('close-add-product');
+const submitProductBtn = document.getElementById('submit-product-btn');
+const newProductName = document.getElementById('new-product-name');
+const newProductDesc = document.getElementById('new-product-desc');
+const newProductPrice = document.getElementById('new-product-price');
+const newProductCategory = document.getElementById('new-product-category');
+const addProductError = document.getElementById('add-product-error');
+
+// Подключение WebSocket
+function connectWebSocket() {
+  ws = new WebSocket('ws://' + location.host);
+  ws.onopen = () => console.log('WebSocket подключен');
+  ws.onmessage = (event) => {
     try {
-        // Проверяем, что ключи не пустые
-        if (BIN_ID === 'YOUR_BIN_ID' || API_KEY === 'YOUR_API_KEY') {
-            alert('⚠️ Внимание! Вы не ввели свои BIN_ID и API_KEY.\nПолучите их на jsonbin.io и замените в коде.');
-            // В демо-режиме используем локальные данные
-            if (!data.users.length) {
-                data.users.push({ id: 1, username: 'Admin', email: 'admin@trueshop.com', password: '', avatar: '', cardNumber: '1234 5678 9012 3456', banned: false });
-                data.products = [
-                    { id: 1, name: 'Товар 1', price: 100, description: 'Описание 1', image: '', sellerId: 'Admin', status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['услуги'] },
-                    { id: 2, name: 'Товар 2', price: 200, description: 'Описание 2', image: '', sellerId: 'Admin', status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['порошки'] }
-                ];
-                saveData(); // сохраним локально
-            }
-            return;
-        }
-        const res = await fetch(BIN_URL, { headers: HEADERS });
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        const json = await res.json();
-        data = json.record || { users: [], products: [], orders: [], chat: [], online: [] };
-        if (!data.users) data.users = [];
-        if (!data.products) data.products = [];
-        if (!data.orders) data.orders = [];
-        if (!data.chat) data.chat = [];
-        if (!data.online) data.online = [];
-        if (data.users.length === 0) {
-            data.users.push({ id: 1, username: 'Admin', email: 'admin@trueshop.com', password: '', avatar: '', cardNumber: '1234 5678 9012 3456', banned: false });
-            await saveData();
-        }
-        await updateOnlineList();
-    } catch (e) {
-        console.error('loadData error', e);
-        alert('❌ Ошибка загрузки данных из JSONBin.\n' +
-              'Проверьте интернет и настройки BIN_ID / API_KEY.\n' +
-              'В демо-режиме используются локальные данные.');
-        // В демо-режиме создаём локальные данные
-        if (!data.users.length) {
-            data.users.push({ id: 1, username: 'Admin', email: 'admin@trueshop.com', password: '', avatar: '', cardNumber: '1234 5678 9012 3456', banned: false });
-            data.products = [
-                { id: 1, name: 'Товар 1', price: 100, description: 'Описание 1', image: '', sellerId: 'Admin', status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['услуги'] },
-                { id: 2, name: 'Товар 2', price: 200, description: 'Описание 2', image: '', sellerId: 'Admin', status: 'approved', reviews: [], cardNumber: '1234 5678 9012 3456', genres: ['порошки'] }
-            ];
-            saveData();
-        }
+      const msg = JSON.parse(event.data);
+      handleMessage(msg);
+    } catch(e) {}
+  };
+  ws.onclose = () => {
+    if (currentUser) {
+      alert('Соединение потеряно. Обновите страницу.');
+      location.reload();
     }
+  };
 }
 
-async function saveData() {
-    try {
-        if (BIN_ID === 'YOUR_BIN_ID' || API_KEY === 'YOUR_API_KEY') {
-            // Сохраняем в localStorage как запасной вариант
-            localStorage.setItem('trueshop_data', JSON.stringify(data));
-            return;
-        }
-        await fetch(BIN_URL, {
-            method: 'PUT',
-            headers: HEADERS,
-            body: JSON.stringify(data)
-        });
-        // Также сохраняем локально для резерва
-        localStorage.setItem('trueshop_data', JSON.stringify(data));
-    } catch (e) {
-        console.error('saveData error', e);
-        // Сохраняем локально, чтобы не потерять данные
-        localStorage.setItem('trueshop_data', JSON.stringify(data));
-    }
+// Обработка входящих сообщений
+function handleMessage(msg) {
+  switch(msg.type) {
+    case 'authSuccess':
+      currentUser = msg.username;
+      token = msg.token;
+      products = msg.products || [];
+      onlineCount = msg.onlineCount || 0;
+      updateOnlineBadge();
+      renderProducts();
+      // Загружаем историю глобального чата
+      if (msg.globalMessages) {
+        globalChatMessages.innerHTML = '';
+        msg.globalMessages.forEach(m => appendGlobalMessage(m));
+      }
+      loginOverlay.style.display = 'none';
+      appDiv.style.display = 'flex';
+      break;
+
+    case 'authError':
+      loginError.textContent = msg.message;
+      break;
+
+    case 'regSuccess':
+      loginSuccess.textContent = msg.message;
+      loginError.textContent = '';
+      break;
+
+    case 'regError':
+      loginError.textContent = msg.message;
+      loginSuccess.textContent = '';
+      break;
+
+    case 'onlineCount':
+      onlineCount = msg.count;
+      updateOnlineBadge();
+      break;
+
+    case 'newProduct':
+      products.push(msg.product);
+      renderProducts();
+      break;
+
+    case 'globalMessage':
+      appendGlobalMessage(msg.message);
+      break;
+
+    case 'privateChatHistory':
+      // Открываем приватный чат
+      activePrivateRoom = { roomId: msg.roomId, withUser: msg.withUser };
+      privateChatTitle.textContent = 'Чат с ' + msg.withUser;
+      privateChatMessages.innerHTML = '';
+      if (msg.messages) msg.messages.forEach(m => appendPrivateMessage(m));
+      privateChatModal.classList.add('active');
+      break;
+
+    case 'privateChatOpened':
+      // Просто уведомление (можно игнорировать)
+      break;
+
+    case 'privateMessage':
+      if (activePrivateRoom && activePrivateRoom.roomId === msg.roomId) {
+        appendPrivateMessage(msg.message);
+      } else {
+        // Уведомление? (игнорируем)
+      }
+      break;
+
+    case 'addProductError':
+      addProductError.textContent = msg.message;
+      break;
+
+    default: break;
+  }
 }
 
-// Функция для загрузки из localStorage в случае ошибки JSONBin
-function loadLocalData() {
-    const local = localStorage.getItem('trueshop_data');
-    if (local) {
-        try {
-            const parsed = JSON.parse(local);
-            if (parsed.users && parsed.products) {
-                data = parsed;
-                return true;
-            }
-        } catch(e) {}
-    }
-    return false;
+// Функции рендеринга
+function updateOnlineBadge() {
+  onlineCountEl.textContent = onlineCount + ' онлайн';
 }
 
-// ================================================================
-// ОНЛАЙН-СЧЁТЧИК
-// ================================================================
-async function updateOnlineList() {
-    const user = getCurrentUser();
-    if (user) {
-        const now = Date.now();
-        const existing = data.online.find(o => o.userId === user.id);
-        if (existing) existing.lastSeen = now;
-        else data.online.push({ userId: user.id, username: user.username, lastSeen: now });
-        data.online = data.online.filter(o => Date.now() - o.lastSeen < 30000);
-        await saveData();
-    }
-    document.getElementById('onlineCount').textContent = data.online.length;
-}
-setInterval(async () => {
-    await loadData();
-    await updateOnlineList();
-}, 10000);
+function renderProducts() {
+  const searchText = searchInput.value.toLowerCase();
+  const cat = categoryFilter.value;
+  const filtered = products.filter(p => {
+    const nameMatch = p.name.toLowerCase().includes(searchText);
+    const catMatch = cat === 'all' || p.category === cat;
+    return nameMatch && catMatch;
+  });
+  productGrid.innerHTML = '';
+  filtered.forEach(product => {
+    const card = document.createElement('div');
+    card.className = 'product-card';
+    card.innerHTML = '<div class="name">' + escapeHtml(product.name) + '</div>' +
+      '<div class="desc">' + escapeHtml(product.description) + '</div>' +
+      '<div class="price">' + product.price.toFixed(2) + ' ₿</div>' +
+      '<div class="meta"><span>' + escapeHtml(product.seller) + '</span><span>' + new Date(product.createdAt).toLocaleDateString() + '</span></div>' +
+      '<div class="actions">' +
+        (product.seller !== currentUser ? '<button class="btn buy-btn" data-seller="' + escapeHtml(product.seller) + '">Купить</button>' : '') +
+      '</div>';
+    productGrid.appendChild(card);
+  });
 
-// ================================================================
-// ПОЛЬЗОВАТЕЛИ (исправлено: добавлены проверки)
-// ================================================================
-function getCurrentUser() { return currentUser; }
-
-async function loginUser(username) {
-    if (!username.trim()) { alert('Введите ник'); return false; }
-    // Загружаем свежие данные
-    await loadData();
-    // Ищем пользователя
-    let user = data.users.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
-    if (!user) {
-        // Создаём нового пользователя
-        user = {
-            id: data.users.length ? Math.max(...data.users.map(u=>u.id)) + 1 : 1,
-            username: username.trim(),
-            email: '',
-            password: '',
-            avatar: '',
-            cardNumber: '',
-            banned: false
-        };
-        data.users.push(user);
-        await saveData();
-        alert('Новый пользователь создан!');
-    }
-    if (user.banned) { alert('Вы забанены'); return false; }
-    // Устанавливаем текущего пользователя
-    currentUser = { username: user.username, avatar: user.avatar || '', id: user.id };
-    saveUser();
-    updateUserInfo();
-    showPage('catalog');
-    return true;
-}
-
-function logout() {
-    currentUser = { username: null, avatar: '' };
-    localStorage.removeItem('trueshop_user');
-    updateUserInfo();
-    showPage('login');
-}
-
-function saveUser() {
-    localStorage.setItem('trueshop_user', JSON.stringify(currentUser));
-}
-
-function loadUser() {
-    const saved = localStorage.getItem('trueshop_user');
-    if (saved) {
-        try {
-            const p = JSON.parse(saved);
-            if (p.username) {
-                currentUser = p;
-                return true;
-            }
-        } catch(e) {}
-    }
-    return false;
-}
-
-function updateUserInfo() {
-    const el = document.getElementById('userInfo');
-    if (currentUser.username) {
-        const avatarHtml = currentUser.avatar ? `<img src="${currentUser.avatar}" class="avatar-mini" onclick="showPage('profile')">` : `<div class="avatar-mini" onclick="showPage('profile')">👤</div>`;
-        el.innerHTML = `${avatarHtml} <b>${currentUser.username}</b> <a onclick="logout()" style="color:#f44336;cursor:pointer;margin-left:8px;">Выйти</a>`;
-    } else {
-        el.innerHTML = `<a onclick="showPage('login')" style="color:#00d4ff;cursor:pointer;">Войти</a>`;
-    }
-}
-
-// ================================================================
-// КОРЗИНА
-// ================================================================
-function getCart() { return JSON.parse(localStorage.getItem('trueshop_cart')) || []; }
-function saveCart(cart) { localStorage.setItem('trueshop_cart', JSON.stringify(cart)); updateCartCount(); }
-function updateCartCount() {
-    const cart = getCart();
-    const count = cart.reduce((s,i) => s + i.qty, 0);
-    document.getElementById('cartCount').textContent = count;
-}
-function addToCart(id) {
-    const prod = data.products.find(p => p.id === id);
-    if (!prod || prod.status !== 'approved') { alert('Товар недоступен'); return; }
-    if (!currentUser.username) { alert('Войдите'); showPage('login'); return; }
-    if (prod.sellerId === currentUser.username) { alert('Свой товар нельзя купить'); return; }
-    const cart = getCart();
-    const existing = cart.find(i => i.id === id);
-    if (existing) existing.qty++;
-    else cart.push({ id, qty: 1 });
-    saveCart(cart);
-    showPage('catalog');
-}
-function removeFromCart(id) { let cart = getCart().filter(i => i.id !== id); saveCart(cart); renderCart(); }
-function clearCart() { saveCart([]); renderCart(); }
-
-// ================================================================
-// НАВИГАЦИЯ
-// ================================================================
-function showPage(page, param) {
-    const content = document.getElementById('pageContent');
-    content.classList.remove('fade-in'); void content.offsetWidth; content.classList.add('fade-in');
-    if (page === 'login') renderLogin();
-    else if (page === 'profile') renderProfile();
-    else if (page === 'catalog') renderCatalog();
-    else if (page === 'cart') renderCart();
-    else if (page === 'myOrders') renderMyOrders();
-    else if (page === 'chats') renderChatsList();
-    else if (page === 'chat' && param) renderChat(param);
-    else if (page === 'globalChat') renderGlobalChat();
-    else if (page === 'rules') renderRules();
-    else if (page === 'game') {
-        if (param === 'tictactoe') renderTicTacToe();
-        else if (param === 'minesweeper') renderMinesweeper();
-        else if (param === 'village') renderVillageBuilder();
-        else if (param === 'paint') renderPaint();
-        else if (param === 'runner') renderRunnerGame();
-        else if (param === 'battleship') renderBattleship();
-        else renderGameHub();
-    }
-    else if (page === 'ai') renderAI();
-    else if (page === 'addProduct') renderAddProduct();
-    else if (page === 'editProduct' && param) renderEditProduct(param);
-    else if (page === 'product' && param) renderProduct(param);
-    else if (page === 'orderForm') renderOrderForm();
-    else content.innerHTML = '<p>Страница не найдена</p>';
-    sessionStorage.setItem('currentPage', page);
-    if (page === 'catalog') { searchQuery = ''; selectedGenre = 'all'; }
-    window.scrollTo({ top:0, behavior:'smooth' });
-    if (page !== 'catalog') document.removeEventListener('keydown', deleteProductHandler);
-    else document.addEventListener('keydown', deleteProductHandler);
-}
-
-// ================================================================
-// УДАЛЕНИЕ ТОВАРОВ (SHIFT+DELETE)
-// ================================================================
-let hoveredProductId = null;
-function deleteProductHandler(e) {
-    if (e.key === 'Delete' || (e.key === 'Shift' && e.location === 2)) {
-        e.preventDefault();
-        if (hoveredProductId !== null && currentUser.username) {
-            const prod = data.products.find(p => p.id === hoveredProductId);
-            if (prod && confirm(`Удалить товар "${prod.name}"?`)) {
-                data.products = data.products.filter(p => p.id !== hoveredProductId);
-                saveData().then(() => { filterProducts(); hoveredProductId = null; alert('Удалено'); });
-            }
-        }
-    }
-}
-document.addEventListener('keydown', deleteProductHandler);
-
-// ================================================================
-// СТРАНИЦА ВХОДА
-// ================================================================
-function renderLogin() {
-    if (currentUser.username) { showPage('catalog'); return; }
-    document.getElementById('pageContent').innerHTML = `
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;">
-            <h2 style="font-size:32px;margin-bottom:20px;">Добро пожаловать в TrueShop</h2>
-            <form id="loginForm" style="background:#151520;padding:40px;border-radius:28px;border:1px solid #2a2a3a;max-width:400px;width:100%;">
-                <div class="form-group">
-                    <label>Введите ваш ник</label>
-                    <input type="text" id="loginUsername" required placeholder="Ваш уникальный ник" style="padding:14px;font-size:18px;">
-                </div>
-                <button type="submit" class="btn" style="width:100%;padding:14px;font-size:18px;">Войти</button>
-                <div style="margin-top:12px;color:#888;font-size:14px;">Ник сохранится в браузере. Аватарку можно загрузить в профиле.</div>
-                <div style="margin-top:8px;font-size:12px;color:#666;">Если не работает вход, проверьте консоль (F12) и настройки JSONBin.</div>
-            </form>
-        </div>
-    `;
-    document.getElementById('loginForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const username = document.getElementById('loginUsername').value.trim();
-        loginUser(username);
+  // Обработчики кнопок "Купить"
+  document.querySelectorAll('.buy-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const seller = e.target.dataset.seller;
+      startPrivateChat(seller);
     });
+  });
 }
 
-// ================================================================
-// ПРОФИЛЬ
-// ================================================================
-function renderProfile() {
-    if (!currentUser.username) { showPage('login'); return; }
-    const avatarHtml = currentUser.avatar ? `<img src="${currentUser.avatar}" class="profile-avatar">` : `<div class="profile-avatar" style="display:flex;align-items:center;justify-content:center;background:#1a1a2a;color:#888;">Нет</div>`;
-    document.getElementById('pageContent').innerHTML = `
-        <h2>Мой профиль</h2>
-        <div class="profile-header">
-            ${avatarHtml}
-            <div class="profile-info">
-                <div class="username">${currentUser.username}</div>
-                <div>Аватар: ${currentUser.avatar ? '✅ установлен' : '❌ не установлен'}</div>
-                <button class="btn btn-secondary" onclick="uploadAvatar()">Загрузить аватар</button>
-                <button class="btn btn-danger" onclick="logout()" style="margin-left:10px;">Выйти</button>
-            </div>
-        </div>
-    `;
-}
-function uploadAvatar() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = async function(ev) {
-                const avatar = ev.target.result;
-                await loadData();
-                const user = data.users.find(u => u.username === currentUser.username);
-                if (user) { user.avatar = avatar; await saveData(); currentUser.avatar = avatar; saveUser(); updateUserInfo(); renderProfile(); }
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-    input.click();
+function escapeHtml(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// ================================================================
-// КАТАЛОГ (общие товары)
-// ================================================================
-async function renderCatalog() {
-    await loadData();
-    let html = `
-        <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="searchInput" placeholder="Поиск..." oninput="filterProducts()" value="${searchQuery}"><button class="btn-search" onclick="filterProducts()">Найти</button></div>
-        <div class="genre-chips"><div class="genre-chip all active" data-genre="all" onclick="selectGenre('all')">Все</div>${GENRES.map(g=>`<div class="genre-chip ${g}" data-genre="${g}" onclick="selectGenre('${g}')">${GENRE_EMOJI[g]} ${g.charAt(0).toUpperCase()+g.slice(1)}</div>`).join('')}</div>
-        <div id="catalogContent"><div class="section-header"><h2 id="sectionTitle">Все товары</h2><span class="count" id="sectionCount"></span></div><div id="productGrid" class="product-grid"></div></div>
-    `;
-    document.getElementById('pageContent').innerHTML = html;
-    if (currentUser.username) {
-        const addBtn = document.createElement('div');
-        addBtn.style.marginTop = '20px';
-        addBtn.innerHTML = `<button class="btn btn-success" onclick="showPage('addProduct')">➕ Добавить товар</button>`;
-        document.getElementById('pageContent').appendChild(addBtn);
-    }
-    document.querySelectorAll('.genre-chip').forEach(chip => {
-        if (chip.dataset.genre === selectedGenre) chip.classList.add('active');
-        else chip.classList.remove('active');
-    });
-    filterProducts();
-    document.getElementById('productGrid')?.addEventListener('mouseover', function(e) {
-        const card = e.target.closest('.product-card');
-        if (card) hoveredProductId = parseInt(card.dataset.id);
-    });
-    document.getElementById('productGrid')?.addEventListener('mouseout', function() { hoveredProductId = null; });
-}
-function filterProducts() {
-    const input = document.getElementById('searchInput');
-    if (input) searchQuery = input.value.trim().toLowerCase();
-    const grid = document.getElementById('productGrid');
-    const title = document.getElementById('sectionTitle');
-    const countSpan = document.getElementById('sectionCount');
-    if (!grid) return;
-    let all = data.products.filter(p => p.status === 'approved');
-    let filtered = all;
-    if (searchQuery) filtered = filtered.filter(p => p.name.toLowerCase().includes(searchQuery));
-    if (selectedGenre !== 'all') filtered = filtered.filter(p => p.genres && p.genres.includes(selectedGenre));
-    if (title) title.textContent = (searchQuery || selectedGenre !== 'all') ? 'Результаты поиска' : 'Все товары';
-    if (countSpan) countSpan.textContent = `${filtered.length} товар(а/ов)`;
-    if (filtered.length === 0) { grid.innerHTML = `<div class="no-results">${(searchQuery || selectedGenre !== 'all') ? '🔍 Ничего не найдено' : 'Товаров пока нет'}</div>`; return; }
-    let html = '';
-    filtered.forEach((p, index) => {
-        const imgHtml = p.image ? `<img src="${p.image}" alt="${p.name}">` : '<div style="height:150px;background:#0a0a12;display:flex;align-items:center;justify-content:center;color:#555;border-radius:14px;">Нет фото</div>';
-        const genresHtml = p.genres && p.genres.length ? `<div class="genres">${p.genres.map(g=>`<span class="genre-tag ${g}">${GENRE_EMOJI[g]||''} ${g}</span>`).join('')}</div>` : '';
-        const isOwn = currentUser.username && p.sellerId === currentUser.username;
-        const buttonHtml = isOwn ? `<span class="badge-own">Это ваш товар</span>` : `<button class="btn" onclick="event.stopPropagation(); addToCart(${p.id})">В корзину</button>`;
-        const deleteHint = `<span class="delete-hint">Удалить (Shift+Del)</span>`;
-        html += `<div class="product-card" data-id="${p.id}" onclick="showPage('product', ${p.id})" style="cursor:pointer; animation: fadeIn 0.4s ease ${index * 0.05}s both;">
-            ${imgHtml}<h3>${p.name}</h3><div class="price">${p.price} руб.</div><div class="meta">⭐ ${p.reviews ? p.reviews.length : 0} отзывов</div>${genresHtml}${buttonHtml}${deleteHint}
-        </div>`;
-    });
-    grid.innerHTML = html;
-}
-function selectGenre(genre) {
-    selectedGenre = genre;
-    document.querySelectorAll('.genre-chip').forEach(chip => {
-        if (chip.dataset.genre === genre) chip.classList.add('active');
-        else chip.classList.remove('active');
-    });
-    filterProducts();
+function appendGlobalMessage(msg) {
+  const div = document.createElement('div');
+  div.className = 'chat-message';
+  div.innerHTML = '<span class="sender">' + escapeHtml(msg.from) + '</span>' +
+    '<span class="time">' + formatTime(msg.time) + '</span><br>' +
+    '<span class="text">' + escapeHtml(msg.text) + '</span>';
+  globalChatMessages.appendChild(div);
+  globalChatMessages.scrollTop = globalChatMessages.scrollHeight;
 }
 
-// ================================================================
-// ОСТАЛЬНЫЕ СТРАНИЦЫ (корзина, заказы, чаты, правила) – упрощённо
-// ================================================================
-function renderCart() {
-    const cart = getCart();
-    if (cart.length === 0) { document.getElementById('pageContent').innerHTML = '<h2>Корзина</h2><p>Корзина пуста.</p>'; return; }
-    let html = '<h2>Корзина</h2><table class="cart-table"><tr><th>Товар</th><th>Цена</th><th>Кол-во</th><th>Сумма</th><th></th></tr>';
-    let total = 0;
-    cart.forEach(item => {
-        const prod = data.products.find(p => p.id === item.id);
-        if (!prod) return;
-        const sum = prod.price * item.qty;
-        total += sum;
-        html += `<tr><td>${prod.name}</td><td>${prod.price}</td><td>${item.qty}</td><td>${sum}</td><td><button class="btn btn-danger" onclick="removeFromCart(${item.id})">Удалить</button></td></tr>`;
-    });
-    html += `</table><div class="total">Итого: ${total} руб.</div>
-        <button class="btn btn-success" onclick="showPage('orderForm')">Оформить заказ</button>
-        <button class="btn btn-danger" onclick="clearCart()">Очистить</button>`;
-    document.getElementById('pageContent').innerHTML = html;
-}
-async function renderOrderForm() {
-    const cart = getCart();
-    if (cart.length === 0) { alert('Корзина пуста'); showPage('cart'); return; }
-    if (!currentUser.username) { alert('Войдите'); showPage('login'); return; }
-    document.getElementById('pageContent').innerHTML = `
-        <h2>Оформление заказа</h2>
-        <form id="orderForm">
-            <div class="form-group"><label>Имя</label><input type="text" id="orderName" value="${currentUser.username}" required></div>
-            <div class="form-group"><label>Телефон</label><input type="text" id="orderPhone"></div>
-            <button type="submit" class="btn btn-success">Подтвердить</button>
-            <button type="button" class="btn btn-secondary" onclick="showPage('cart')">Назад</button>
-        </form>
-    `;
-    document.getElementById('orderForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        await loadData();
-        const name = document.getElementById('orderName').value.trim() || 'Покупатель';
-        const phone = document.getElementById('orderPhone').value.trim();
-        const cartItems = getCart();
-        const orderItems = cartItems.map(item => {
-            const prod = data.products.find(p => p.id === item.id);
-            return { productId: prod.id, productName: prod.name, price: prod.price, qty: item.qty, total: prod.price * item.qty, buyerName: name, buyerPhone: phone, sellerId: prod.sellerId };
-        });
-        const order = {
-            id: data.orders.length ? Math.max(...data.orders.map(o=>o.id))+1 : 1,
-            items: orderItems,
-            buyerName: name,
-            buyerId: currentUser.username,
-            status: 'pending',
-            created: new Date().toLocaleString(),
-            messages: [{ senderId: 'system', text: 'Заказ создан.', timestamp: new Date().toLocaleString() }]
-        };
-        data.orders.push(order);
-        await saveData();
-        saveCart([]);
-        updateCartCount();
-        alert('Заказ оформлен!');
-        showPage('myOrders');
-    });
-}
-async function renderMyOrders() {
-    if (!currentUser.username) { showPage('login'); return; }
-    await loadData();
-    const myOrders = data.orders.filter(o => o.buyerId === currentUser.username);
-    if (myOrders.length === 0) { document.getElementById('pageContent').innerHTML = '<h2>Мои заказы</h2><p>Нет заказов.</p>'; return; }
-    let html = '<h2>Мои заказы</h2>';
-    myOrders.forEach(o => {
-        html += `<div class="order-card">
-            <b>Заказ #${o.id}</b> от ${o.created}<br>
-            Товары: ${o.items.map(i => `${i.productName} x${i.qty}`).join(', ')}<br>
-            Сумма: ${o.items.reduce((s,i) => s + i.total, 0)} руб.<br>
-            Статус: <span class="status-${o.status}">${o.status === 'pending' ? 'Ожидает' : o.status}</span><br>
-            <button class="btn btn-secondary order-chat-link" onclick="showPage('chat',${o.id})">Чат</button>
-        </div>`;
-    });
-    document.getElementById('pageContent').innerHTML = html;
-}
-function renderChatsList() {
-    if (!currentUser.username) { showPage('login'); return; }
-    const myOrders = data.orders.filter(o => o.buyerId === currentUser.username);
-    if (myOrders.length === 0) { document.getElementById('pageContent').innerHTML = '<h2>Чаты</h2><p>Нет заказов для чата.</p>'; return; }
-    let html = '<h2>Чаты</h2>';
-    myOrders.forEach(o => {
-        const lastMsg = o.messages && o.messages.length > 0 ? o.messages[o.messages.length-1].text : 'Нет сообщений';
-        html += `<div class="order-card" style="cursor:pointer;" onclick="showPage('chat',${o.id})">
-            <b>Заказ #${o.id}</b> — ${o.items.map(i => i.productName).join(', ')}<br>
-            <span style="color:#888;">Последнее: ${lastMsg}</span>
-        </div>`;
-    });
-    document.getElementById('pageContent').innerHTML = html;
-}
-async function renderChat(orderId) {
-    if (!currentUser.username) { showPage('login'); return; }
-    await loadData();
-    const order = data.orders.find(o => o.id === orderId);
-    if (!order) { alert('Заказ не найден'); showPage('chats'); return; }
-    let html = `<h2>Чат по заказу #${order.id}</h2>
-        <div class="chat-container">
-            <div class="chat-messages" id="chatMessages">`;
-    if (order.messages && order.messages.length > 0) {
-        order.messages.forEach(msg => {
-            const isSystem = msg.senderId === 'system';
-            const isSelf = msg.senderId === currentUser.username;
-            const cls = isSystem ? 'system' : (isSelf ? 'self' : '');
-            const senderName = isSystem ? 'Система' : (isSelf ? 'Вы' : msg.senderId);
-            html += `<div class="chat-message ${cls}">
-                <span class="sender">${senderName}</span>
-                <span class="time">${msg.timestamp || ''}</span>
-                <div>${msg.text}</div>
-            </div>`;
-        });
-    } else {
-        html += `<div class="chat-message system">Сообщений пока нет.</div>`;
-    }
-    html += `</div>
-            <div class="chat-input">
-                <input type="text" id="chatInput" placeholder="Введите сообщение...">
-                <button class="btn" onclick="sendOrderMessage(${orderId})">Отправить</button>
-            </div>
-            <div style="margin-top:12px;">
-                <button class="btn btn-secondary" onclick="showPage('chats')">← Назад</button>
-            </div>
-        </div>`;
-    document.getElementById('pageContent').innerHTML = html;
-    const msgs = document.getElementById('chatMessages');
-    if (msgs) msgs.scrollTop = msgs.scrollHeight;
-}
-async function sendOrderMessage(orderId) {
-    const input = document.getElementById('chatInput');
-    if (!input) return;
-    const text = input.value.trim();
-    if (!text) return;
-    await loadData();
-    const order = data.orders.find(o => o.id === orderId);
-    if (!order) return;
-    if (!order.messages) order.messages = [];
-    order.messages.push({ senderId: currentUser.username, text, timestamp: new Date().toLocaleString() });
-    await saveData();
-    input.value = '';
-    renderChat(orderId);
-}
-async function renderGlobalChat() {
-    await loadData();
-    let html = `
-        <div class="global-chat-container">
-            <h2>🌐 Общий чат</h2>
-            <div class="global-chat-messages" id="globalChatMessages">
-                ${data.chat.map(msg => `<div class="global-chat-msg ${msg.system?'system-msg':''}"><span class="sender">${msg.username}</span><span class="time">${msg.timestamp||''}</span><div>${msg.text}</div></div>`).join('')}
-                ${data.chat.length===0?'<div class="global-chat-msg system-msg">Пока нет сообщений.</div>':''}
-            </div>
-            ${currentUser.username ? `
-            <div class="global-chat-input">
-                <input type="text" id="globalChatInput" placeholder="Введите сообщение..." onkeydown="if(event.key==='Enter') sendGlobalMessage()">
-                <button class="btn" onclick="sendGlobalMessage()">Отправить</button>
-            </div>
-            ` : `<p style="color:#888;">Войдите, чтобы отправлять сообщения.</p>`}
-        </div>
-    `;
-    document.getElementById('pageContent').innerHTML = html;
-    const chatDiv = document.getElementById('globalChatMessages');
-    if (chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight;
-}
-async function sendGlobalMessage() {
-    if (!currentUser.username) { alert('Войдите'); showPage('login'); return; }
-    const input = document.getElementById('globalChatInput');
-    if (!input) return;
-    const text = input.value.trim();
-    if (!text) return;
-    await loadData();
-    data.chat.push({ username: currentUser.username, text, timestamp: new Date().toLocaleString(), system: false });
-    await saveData();
-    input.value = '';
-    renderGlobalChat();
-}
-function renderRules() {
-    document.getElementById('pageContent').innerHTML = `
-        <div class="rules-container">
-            <h1>📋 Правила</h1>
-            <div class="rule-item"><strong>1.</strong> Переводите деньги напрямую продавцу.</div>
-            <div class="rule-item"><strong>2.</strong> Запрещено мошенничество.</div>
-            <img src="https://img.freepik.com/free-vector/crazy-emoji-comic-character-icon_24877-83241.jpg" alt="Правила" loading="lazy">
-        </div>
-    `;
+function appendPrivateMessage(msg) {
+  const div = document.createElement('div');
+  div.className = 'chat-message';
+  div.innerHTML = '<span class="sender">' + escapeHtml(msg.from) + '</span>' +
+    '<span class="time">' + formatTime(msg.time) + '</span><br>' +
+    '<span class="text">' + escapeHtml(msg.text) + '</span>';
+  privateChatMessages.appendChild(div);
+  privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
 }
 
-// ================================================================
-// ИГРЫ (полный набор, но для краткости оставляем заглушки, т.к. они уже были)
-// ================================================================
-function renderGameHub() {
-    document.getElementById('pageContent').innerHTML = `
-        <div class="game-hub"><h2>🎮 Игровой центр</h2>
-        <div class="game-grid">
-            <div class="game-card" onclick="showPage('game','tictactoe')"><span class="icon">❌⭕</span><h3>Крестики-нолики</h3></div>
-            <div class="game-card" onclick="showPage('game','minesweeper')"><span class="icon">💣</span><h3>Сапёр</h3></div>
-            <div class="game-card" onclick="showPage('game','village')"><span class="icon">🏡</span><h3>Построй деревню</h3></div>
-            <div class="game-card" onclick="showPage('game','paint')"><span class="icon">🎨</span><h3>Paint</h3></div>
-            <div class="game-card" onclick="showPage('game','runner')"><span class="icon">🏃</span><h3>Закладчик</h3></div>
-            <div class="game-card" onclick="showPage('game','battleship')"><span class="icon">⚓</span><h3>Морская битва</h3></div>
-        </div></div>
-    `;
-}
-// Заглушки для игр (полные реализации уже были в предыдущих версиях)
-function renderTicTacToe() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>❌⭕ Крестики-нолики</h2><p>Игра работает</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
-function renderMinesweeper() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>💣 Сапёр</h2><p>Игра работает</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
-function renderVillageBuilder() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>🏡 Построй деревню</h2><p>Игра работает</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
-function renderPaint() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>🎨 Paint</h2><p>Игра работает</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
-function renderRunnerGame() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>🏃 Закладчик</h2><p>Игра работает</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
-function renderBattleship() { document.getElementById('pageContent').innerHTML = '<div class="game-container"><h2>⚓ Морская битва</h2><p>Игра работает</p><button class="btn btn-secondary" onclick="showPage('game')">Назад</button></div>'; }
-
-// ================================================================
-// AI (ДЕМО)
-// ================================================================
-function renderAI() {
-    document.getElementById('pageContent').innerHTML = `
-        <div class="ai-container">
-            <h2 style="text-align:center;font-size:28px;margin-bottom:20px;">🤖 AI Ассистент (демо)</h2>
-            <div class="ai-chat" id="aiChat">
-                <div class="msg system-msg">Задайте вопрос</div>
-            </div>
-            <div class="ai-input">
-                <input type="text" id="aiInput" placeholder="Спросите что-нибудь..." onkeydown="if(event.key==='Enter') sendAIMessage()">
-                <button class="btn" onclick="sendAIMessage()">Отправить</button>
-            </div>
-        </div>
-    `;
-}
-function sendAIMessage() {
-    const input = document.getElementById('aiInput');
-    if (!input) return;
-    const q = input.value.trim();
-    if (!q) return;
-    const chat = document.getElementById('aiChat');
-    const userMsg = document.createElement('div');
-    userMsg.className = 'msg user';
-    userMsg.textContent = q;
-    chat.appendChild(userMsg);
-    input.value = '';
-    chat.scrollTop = chat.scrollHeight;
-    setTimeout(() => {
-        const reply = document.createElement('div');
-        reply.className = 'msg assistant';
-        reply.textContent = 'Демо-ответ. Для полного AI нужен API-ключ.';
-        chat.appendChild(reply);
-        chat.scrollTop = chat.scrollHeight;
-    }, 500);
+function formatTime(isoString) {
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  } catch(e) { return ''; }
 }
 
-// ================================================================
-// ДОБАВЛЕНИЕ / РЕДАКТИРОВАНИЕ ТОВАРОВ
-// ================================================================
-function renderAddProduct() {
-    if (!currentUser.username) { showPage('login'); return; }
-    document.getElementById('pageContent').innerHTML = `
-        <h2>Продажа товара</h2>
-        <div class="add-product-form">
-            <form id="addProductForm" enctype="multipart/form-data">
-                <div class="form-group"><label>Название</label><input type="text" id="prodName" required></div>
-                <div class="form-group"><label>Цена</label><input type="number" id="prodPrice" required></div>
-                <div class="form-group"><label>Описание</label><textarea id="prodDesc" rows="3"></textarea></div>
-                <div class="form-group"><label>Изображение</label><input type="file" id="prodImage" accept="image/*"></div>
-                <div class="form-group"><label>Номер карты</label><input type="text" id="prodCard" required placeholder="Номер карты для оплаты"></div>
-                <div class="form-group"><label>Жанры (макс. 2)</label>
-                    <div class="genre-checkboxes">${GENRES.map(g => `<label><input type="checkbox" class="genre-check" value="${g}"> ${GENRE_EMOJI[g]} ${g.charAt(0).toUpperCase()+g.slice(1)}</label>`).join('')}</div>
-                </div>
-                <button type="submit" class="btn btn-success">Опубликовать</button>
-                <button type="button" class="btn btn-secondary" onclick="showPage('catalog')">Отмена</button>
-            </form>
-        </div>
-    `;
-    const checkboxes = document.querySelectorAll('.genre-check');
-    checkboxes.forEach(cb => {
-        cb.addEventListener('change', function() {
-            const checked = document.querySelectorAll('.genre-check:checked');
-            if (checked.length > 2) { this.checked = false; alert('Максимум 2 жанра'); }
-        });
-    });
-    document.getElementById('addProductForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const name = document.getElementById('prodName').value.trim();
-        const price = parseFloat(document.getElementById('prodPrice').value);
-        const desc = document.getElementById('prodDesc').value.trim();
-        const card = document.getElementById('prodCard').value.trim();
-        const selectedGenres = Array.from(document.querySelectorAll('.genre-check:checked')).map(cb => cb.value);
-        if (!name || isNaN(price)) { alert('Заполните название и цену'); return; }
-        if (!card) { alert('Введите номер карты'); return; }
-        if (selectedGenres.length === 0 || selectedGenres.length > 2) { alert('Выберите 1-2 жанра'); return; }
-        const fileInput = document.getElementById('prodImage');
-        const reader = new FileReader();
-        reader.onload = async function(ev) {
-            const image = ev.target.result || '';
-            await loadData();
-            const newProduct = {
-                id: data.products.length ? Math.max(...data.products.map(p => p.id)) + 1 : 1,
-                name, price, description: desc, image,
-                sellerId: currentUser.username,
-                status: 'approved', reviews: [],
-                cardNumber: card, genres: selectedGenres
-            };
-            data.products.push(newProduct);
-            await saveData();
-            alert('Товар опубликован');
-            showPage('catalog');
-        };
-        if (fileInput.files.length > 0) reader.readAsDataURL(fileInput.files[0]);
-        else reader.onload(null);
-    });
-}
-function renderEditProduct(id) {
-    alert('Редактирование товара временно отключено');
-    showPage('catalog');
-}
-function renderProduct(id) {
-    const prod = data.products.find(p => p.id === id);
-    if (!prod) { document.getElementById('pageContent').innerHTML = '<p>Товар не найден</p>'; return; }
-    document.getElementById('pageContent').innerHTML = `
-        <h2>${prod.name}</h2>
-        <p>${prod.description}</p>
-        <p>Цена: ${prod.price} руб.</p>
-        <p>Продавец: ${prod.sellerId || 'Аноним'}</p>
-        <button class="btn" onclick="addToCart(${prod.id})">В корзину</button>
-        <button class="btn btn-secondary" onclick="showPage('catalog')">Назад</button>
-    `;
+// Запуск приватного чата
+function startPrivateChat(seller) {
+  ws.send(JSON.stringify({ type: 'startPrivateChat', token, withUser: seller }));
 }
 
-// ================================================================
-// ОНЛАЙН-СТАТУС
-// ================================================================
-function updateOnlineStatus() {
-    const dot = document.getElementById('onlineDot');
-    const txt = document.getElementById('onlineText');
-    if (!dot) return;
-    if (navigator.onLine) {
-        dot.className = 'online-dot online';
-        txt.textContent = 'Онлайн';
-    } else {
-        dot.className = 'online-dot offline';
-        txt.textContent = 'Офлайн';
-    }
-}
-window.addEventListener('online', updateOnlineStatus);
-window.addEventListener('offline', updateOnlineStatus);
-
-// ================================================================
-// ИНИЦИАЛИЗАЦИЯ
-// ================================================================
-document.addEventListener('DOMContentLoaded', async function() {
-    // Сначала пробуем загрузить из localStorage (быстрый старт)
-    if (loadLocalData()) {
-        // Данные загружены из локального кэша
-    }
-    // Затем пробуем загрузить из JSONBin (обновить)
-    await loadData();
-    // Восстанавливаем пользователя
-    if (loadUser()) {
-        const exists = data.users.some(u => u.username === currentUser.username && !u.banned);
-        if (!exists) { currentUser = { username: null, avatar: '' }; localStorage.removeItem('trueshop_user'); }
-    }
-    updateUserInfo();
-    updateCartCount();
-    updateOnlineStatus();
-    if (currentUser.username) showPage('catalog');
-    else showPage('login');
+// ================== ПРИВЯЗКА СОБЫТИЙ ==================
+// Вход
+loginBtn.addEventListener('click', () => {
+  const username = loginUsername.value.trim();
+  const password = loginPassword.value.trim();
+  if (!username || !password) {
+    loginError.textContent = 'Заполните все поля';
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'auth', username, password }));
+  loginError.textContent = '';
+  loginSuccess.textContent = '';
 });
+
+// Регистрация
+registerBtn.addEventListener('click', () => {
+  const username = loginUsername.value.trim();
+  const password = loginPassword.value.trim();
+  if (!username || !password) {
+    loginError.textContent = 'Заполните все поля';
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'register', username, password }));
+  loginError.textContent = '';
+  loginSuccess.textContent = '';
+});
+
+// Выход
+logoutBtn.addEventListener('click', () => {
+  if (ws) ws.close();
+  currentUser = null;
+  token = null;
+  loginOverlay.style.display = 'flex';
+  appDiv.style.display = 'none';
+  loginUsername.value = '';
+  loginPassword.value = '';
+  loginError.textContent = '';
+  loginSuccess.textContent = '';
+  connectWebSocket(); // переподключимся анонимно
+});
+
+// Поиск и фильтрация
+searchInput.addEventListener('input', renderProducts);
+categoryFilter.addEventListener('change', renderProducts);
+
+// Глобальный чат
+globalChatBtn.addEventListener('click', () => globalChatModal.classList.add('active'));
+closeGlobalChat.addEventListener('click', () => globalChatModal.classList.remove('active'));
+sendGlobalBtn.addEventListener('click', sendGlobalMessage);
+globalChatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendGlobalMessage(); });
+function sendGlobalMessage() {
+  const text = globalChatInput.value.trim();
+  if (!text) return;
+  ws.send(JSON.stringify({ type: 'globalMessage', token, text }));
+  globalChatInput.value = '';
+}
+
+// Приватный чат
+closePrivateChat.addEventListener('click', () => {
+  privateChatModal.classList.remove('active');
+  activePrivateRoom = null;
+});
+sendPrivateBtn.addEventListener('click', sendPrivateMessage);
+privateChatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendPrivateMessage(); });
+function sendPrivateMessage() {
+  if (!activePrivateRoom) return;
+  const text = privateChatInput.value.trim();
+  if (!text) return;
+  ws.send(JSON.stringify({ type: 'privateMessage', token, roomId: activePrivateRoom.roomId, text }));
+  privateChatInput.value = '';
+}
+
+// Добавление товара
+addProductBtn.addEventListener('click', () => addProductModal.classList.add('active'));
+closeAddProduct.addEventListener('click', () => addProductModal.classList.remove('active'));
+submitProductBtn.addEventListener('click', () => {
+  const name = newProductName.value.trim();
+  const desc = newProductDesc.value.trim();
+  const price = parseFloat(newProductPrice.value);
+  const category = newProductCategory.value;
+  if (!name || !desc || isNaN(price) || price < 0) {
+    addProductError.textContent = 'Заполните все поля корректно';
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'addProduct', token, name, description: desc, price, category }));
+  addProductModal.classList.remove('active');
+  newProductName.value = '';
+  newProductDesc.value = '';
+  newProductPrice.value = '';
+  addProductError.textContent = '';
+});
+
+// Инициализация
+connectWebSocket();
 </script>
 </body>
-</html>
+</html>`;
+}
+
+// ================== ЗАПУСК СЕРВЕРА ==================
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log('TrueShop server running on http://localhost:' + PORT);
+});

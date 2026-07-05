@@ -1,7 +1,7 @@
 /**
- * NEON_CHAN // FULL MONOLITHIC CYBER-BOARD
- * * Этот скрипт является полностью автономным. При первом запуске он автоматически
- * разворачивает структуру папок (public, uploads) и генерирует фронтенд (HTML, CSS, JS).
+ * TKK_FORUM // FULL MONOLITHIC CYBER-BOARD
+ * * Этот скрипт автоматически разворачивает структуру папок (public, uploads)
+ * и генерирует фронтенд (HTML, CSS, JS) с глубоким неоново-черным интерфейсом.
  * * Инструкция по запуску:
  * 1. npm install express cors multer
  * 2. node server.js
@@ -23,19 +23,19 @@ dirs.forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir);
 });
 
-// Генерируем public/index.html
+// Генерируем public/index.html (Обновлено название на TKK_FORUM)
 const htmlContent = `<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEON_CHAN // Анонимный Кибер-Форум</title>
+    <title>TKK_FORUM // Анонимный Кибер-Форум</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
     <header class="neon-header">
-        <h1 class="neon-logo" data-text="NEON_CHAN">NEON_CHAN</h1>
+        <h1 class="neon-logo" data-text="TKK_FORUM">TKK_FORUM</h1>
         <nav class="board-nav">
             [ <a href="#" onclick="switchBoard('b')">/b/</a> ]
             [ <a href="#" onclick="switchBoard('tech')">/tech/</a> ]
@@ -88,24 +88,32 @@ const htmlContent = `<!DOCTYPE html>
 </body>
 </html>`;
 
-// Генерируем public/style.css
+// Генерируем public/style.css (Исправлена ошибка rgba и добавлен принудительный темный фон)
 const cssContent = `:root {
-    --bg-color: #0a0a12;
-    --panel-bg: #121224;
+    --bg-color: #05050a;
+    --panel-bg: #0d0d1a;
     --neon-cyan: #00f0ff;
     --neon-pink: #ff0055;
     --neon-green: #39ff14;
     --text-color: #e0e0ff;
-    --text-muted: #7070a0;
-    --neon-glow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.3);
-    --pink-glow: 0 0 10px rgba(255, 0, 85, 0.5);
+    --text-muted: #60608a;
+    --neon-glow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.2);
+    --pink-glow: 0 0 10px rgba(255, 0, 85, 0.4);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-    background-color: var(--bg-color);
-    color: var(--text-color);
+/* Принудительный сброс стилей браузера */
+html, body {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
     font-family: 'Roboto Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
     padding-bottom: 50px;
     overflow-x: hidden;
 }
@@ -122,17 +130,23 @@ body {
     background: var(--panel-bg);
     border-bottom: 2px solid var(--neon-cyan);
     box-shadow: var(--neon-glow);
-    padding: 20px;
+    padding: 25px;
     text-align: center;
     margin-bottom: 30px;
 }
 
 .neon-logo {
     font-family: 'Orbitron', sans-serif;
-    color: #fff;
-    font-size: 2.5rem;
-    letter-spacing: 5px;
-    text-shadow: 0 0 10px var(--neon-cyan), 0 0 30px var(--neon-cyan);
+    color: #ffffff;
+    font-size: 2.8rem;
+    letter-spacing: 7px;
+    text-shadow: 0 0 10px var(--neon-cyan), 0 0 25px var(--neon-cyan);
+    margin-bottom: 10px;
+}
+
+.board-nav {
+    margin-top: 10px;
+    font-size: 1.1rem;
 }
 
 .board-nav a {
@@ -140,6 +154,7 @@ body {
     text-decoration: none;
     font-weight: bold;
     transition: 0.3s;
+    margin: 0 5px;
 }
 
 .board-nav a:hover {
@@ -147,7 +162,7 @@ body {
     text-shadow: var(--neon-glow);
 }
 
-.current-board-title { margin-top: 10px; color: var(--text-muted); }
+.current-board-title { margin-top: 12px; color: var(--text-muted); font-size: 0.9rem; }
 .current-board-title span { color: var(--neon-green); text-shadow: 0 0 5px var(--neon-green); }
 .container { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
 
@@ -155,18 +170,18 @@ body {
     border: 1px solid var(--neon-cyan);
     background: var(--panel-bg);
     box-shadow: var(--neon-glow);
-    padding: 20px;
+    padding: 25px;
     margin-bottom: 30px;
 }
 
-h3 { font-family: 'Orbitron', sans-serif; color: var(--neon-cyan); margin-bottom: 15px; }
+h3 { font-family: 'Orbitron', sans-serif; color: var(--neon-cyan); margin-bottom: 20px; letter-spacing: 2px; }
 
 .input-group input, .input-group textarea, .modal-content textarea, .modal-content input {
     width: 100%;
-    background: #05050a;
+    background: #020205;
     border: 1px solid var(--text-muted);
     color: var(--text-color);
-    padding: 10px;
+    padding: 12px;
     margin-bottom: 15px;
     font-family: inherit;
     transition: 0.3s;
@@ -186,6 +201,7 @@ h3 { font-family: 'Orbitron', sans-serif; color: var(--neon-cyan); margin-bottom
     border: 1px dashed var(--neon-green);
     padding: 8px 15px;
     transition: 0.3s;
+    font-size: 0.9rem;
 }
 
 .cyber-file-upload span:hover {
@@ -197,11 +213,12 @@ h3 { font-family: 'Orbitron', sans-serif; color: var(--neon-cyan); margin-bottom
     background: transparent;
     border: 1px solid var(--neon-cyan);
     color: var(--neon-cyan);
-    padding: 8px 20px;
+    padding: 10px 25px;
     cursor: pointer;
     font-family: 'Orbitron', sans-serif;
     font-weight: bold;
     transition: 0.3s;
+    letter-spacing: 1px;
 }
 
 .neon-btn:hover {
@@ -211,7 +228,7 @@ h3 { font-family: 'Orbitron', sans-serif; color: var(--neon-cyan); margin-bottom
 }
 
 .thread-card { border-left: 4px solid var(--neon-pink); margin-bottom: 40px; padding-left: 15px; }
-.post { background: var(--panel-bg); border: 1px solid rgba(0, 240, 255, 0.2); padding: 15px; margin-bottom: 10px; }
+.post { background: var(--panel-bg); border: 1px solid rgba(0, 240, 255, 0.15); padding: 15px; margin-bottom: 10px; }
 .post.op-post { border: 1px solid var(--neon-cyan); box-shadow: 0 0 8px rgba(0, 240, 255, 0.1); }
 .post-header { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px; display: flex; gap: 15px; flex-wrap: wrap; }
 .post-author { color: var(--neon-pink); font-weight: bold; }
@@ -219,14 +236,14 @@ h3 { font-family: 'Orbitron', sans-serif; color: var(--neon-cyan); margin-bottom
 .post-body { display: flex; gap: 20px; }
 .post-img { max-width: 150px; max-height: 150px; border: 1px solid var(--text-muted); object-fit: cover; cursor: pointer; transition: 0.3s; }
 .post-img:hover { border-color: var(--neon-cyan); box-shadow: var(--neon-glow); }
-.post-text { line-height: 1.5; white-space: pre-wrap; }
+.post-text { line-height: 1.6; white-space: pre-wrap; color: var(--text-color); }
 .replies-container { margin-left: 40px; }
-.reply-link { color: var(--neon-green); text-decoration: none; cursor: pointer; font-size: 0.85rem; }
+.reply-link { color: var(--neon-green); text-decoration: none; cursor: pointer; font-size: 0.85rem; margin-left: auto; }
 
 .modal {
     display: none; position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.8); z-index: 1000;
+    background: rgba(0,0,0,0.85); z-index: 1000;
     justify-content: center; align-items: center;
 }
 .modal-content { width: 90%; max-width: 500px; }
@@ -336,7 +353,7 @@ fs.writeFileSync('./public/index.html', htmlContent);
 fs.writeFileSync('./public/style.css', cssContent);
 fs.writeFileSync('./public/app.js', jsContent);
 
-console.log('>> [SUCCESS] Neon UI assets spawned successfully in /public');
+console.log('>> [SUCCESS] TKK Forum core UI spawned in /public');
 
 // === 2. БЭКЕНД И ОБРАБОТКА ДАННЫХ ===
 
@@ -351,7 +368,6 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// База данных в памяти (можно заменить на MongoDB/SQLite)
 let boards = {
     b: { name: 'Бред', threads: [] },
     tech: { name: 'Технологии', threads: [] },
@@ -403,8 +419,7 @@ app.post('/api/board/:boardId/thread/:threadId', upload.single('image'), (req, r
     res.status(201).json(replyPost);
 });
 
-// Запуск сервера матрицы
 app.listen(PORT, () => {
-    console.log(`>> [READY] NeonChan core successfully loaded.`);
-    console.log(`>> Access the network: http://localhost:${PORT}`);
+    console.log(`>> [READY] TKK_FORUM loaded.`);
+    console.log(`>> URL: http://localhost:${PORT}`);
 });

@@ -1,526 +1,585 @@
-/*
- * TrueShop - Web Edition (исправлены ошибки регистрации)
- * Запуск: npm install ws && node trueshop.js
- */
-
-const http = require('http');
+// server.js - Backend for NeonChan
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
 const fs = require('fs');
-const WebSocket = require('ws');
 
-// ================== ХРАНИЛИЩЕ ДАННЫХ ==================
-const DATA_FILE = 'data.json';
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-let data = {
-  users: {},
-  products: [],
-  globalMessages: [],
-  privateMessages: {}
+// Настройка хранилища для картинок
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadDir = './uploads';
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir);
+        }
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
+app.use(cors());
+app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Имитация базы данных в памяти
+let boards = {
+    b: { name: 'Бред', threads: [] },
+    tech: { name: 'Технологии', threads: [] },
+    pr: { name: 'Программирование', threads: [] }
 };
 
-try {
-  if (fs.existsSync(DATA_FILE)) {
-    data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  } else {
-    // Тестовые данные
-    data.users['admin'] = { password: 'admin', token: null };
-    data.users['hacker'] = { password: '1234', token: null };
-    data.products.push(
-      { id: genId(), name: 'Троян ShadowGhost', description: 'Невидимый троян для удалённого доступа, обходит антивирусы.', price: 499.99, category: 'virus', seller: 'admin', createdAt: new Date().toISOString() },
-      { id: genId(), name: 'Вирус-шифровальщик Crypton', description: 'Шифрует файлы жертвы, требует выкуп в криптовалюте.', price: 1299.50, category: 'virus', seller: 'hacker', createdAt: new Date().toISOString() },
-      { id: genId(), name: 'Рецепт борща по-хакерски', description: 'Секретный рецепт борща с неоновой свёклой и чипсами.', price: 9.99, category: 'recipe', seller: 'admin', createdAt: new Date().toISOString() },
-      { id: genId(), name: 'Пицца Киберпанк', description: 'Рецепт пиццы с синей плесенью и светящимся соусом.', price: 14.50, category: 'recipe', seller: 'hacker', createdAt: new Date().toISOString() }
-    );
-    saveData();
-  }
-} catch (e) {
-  console.error('Ошибка загрузки:', e);
+// Хелпер для создания постов
+function createPost(name, comment, file, isOp = false) {
+    return {
+        id: Math.floor(100000 + Math.random() * 900000),
+        time: new Date().toLocaleString('ru-RU'),
+        name: name || 'Аноним',
+        comment: comment || '',
+        file: file ? `/uploads/${file.filename}` : null,
+        isOp: isOp,
+        replies: []
+    };
 }
 
-function saveData() {
-  try { fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8'); } catch (e) {}
-}
-function genId() { return Math.random().toString(36).substr(2, 9); }
-
-// ================== HTTP СЕРВЕР ==================
-const server = http.createServer((req, res) => {
-  if (req.url === '/' || req.url === '/index.html') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(getHTML());
-  } else {
-    res.writeHead(404);
-    res.end('Not Found');
-  }
+// Получить все треды доски
+app.get('/api/board/:boardId', (req, res) => {
+    const board = boards[req.params.boardId];
+    if (!board) return res.status(404).json({ error: 'Доска не найдена' });
+    res.json(board);
 });
 
-// ================== WEBSOCKET ==================
-const wss = new WebSocket.Server({ server });
-const onlineUsers = new Map();
+// Создать новый тред
+app.post('/api/board/:boardId/thread', upload.single('image'), (req, res) => {
+    const board = boards[req.params.boardId];
+    if (!board) return res.status(404).json({ error: 'Доска не найдена' });
 
-function broadcastOnlineCount() {
-  const count = onlineUsers.size;
-  const msg = JSON.stringify({ type: 'onlineCount', count });
-  wss.clients.forEach(c => c.readyState === WebSocket.OPEN && c.send(msg));
-}
-
-function sendToUser(username, msgObj) {
-  const ws = onlineUsers.get(username);
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msgObj));
-}
-
-function broadcastGlobalMessage(msg) {
-  data.globalMessages.push(msg);
-  if (data.globalMessages.length > 100) data.globalMessages.shift();
-  saveData();
-  const payload = JSON.stringify({ type: 'globalMessage', message: msg });
-  wss.clients.forEach(c => c.readyState === WebSocket.OPEN && c.send(payload));
-}
-
-function getRoomId(u1, u2) { return [u1, u2].sort().join('::'); }
-function getOrCreatePrivateRoom(u1, u2) {
-  const id = getRoomId(u1, u2);
-  if (!data.privateMessages[id]) data.privateMessages[id] = [];
-  return id;
-}
-function sendPrivateMessage(roomId, from, text) {
-  const room = data.privateMessages[roomId];
-  if (!room) return;
-  const msg = { from, text, time: new Date().toISOString() };
-  room.push(msg);
-  saveData();
-  const payload = { type: 'privateMessage', roomId, message: msg };
-  roomId.split('::').forEach(u => sendToUser(u, payload));
-}
-
-wss.on('connection', (ws) => {
-  let currentUser = null;
-
-  ws.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
-
-    // --- Авторизация ---
-    if (msg.type === 'auth') {
-      const { username, password } = msg;
-      const user = data.users[username];
-      if (user && user.password === password) {
-        user.token = genId();
-        currentUser = username;
-        onlineUsers.set(username, ws);
-        broadcastOnlineCount();
-        ws.send(JSON.stringify({
-          type: 'authSuccess', username, token: user.token,
-          products: data.products,
-          globalMessages: data.globalMessages.slice(-50),
-          onlineCount: onlineUsers.size
-        }));
-      } else {
-        ws.send(JSON.stringify({ type: 'authError', message: 'Неверный логин или пароль' }));
-      }
+    const { name, comment } = req.body;
+    if (!comment && !req.file) {
+        return res.status(400).json({ error: 'Нужен текст или картинка для создания треда' });
     }
 
-    // --- Регистрация (с авто-входом) ---
-    else if (msg.type === 'register') {
-      const { username, password } = msg;
-      if (!username || !password) {
-        return ws.send(JSON.stringify({ type: 'regError', message: 'Заполните все поля' }));
-      }
-      if (data.users[username]) {
-        return ws.send(JSON.stringify({ type: 'regError', message: 'Пользователь уже существует' }));
-      }
-      // Создаём пользователя и сразу авторизуем
-      data.users[username] = { password, token: genId() };
-      saveData();
-      currentUser = username;
-      onlineUsers.set(username, ws);
-      broadcastOnlineCount();
-      ws.send(JSON.stringify({
-        type: 'authSuccess', username, token: data.users[username].token,
-        products: data.products,
-        globalMessages: data.globalMessages.slice(-50),
-        onlineCount: onlineUsers.size
-      }));
-    }
+    const opPost = createPost(name, comment, req.file, true);
+    board.threads.unshift(opPost); // Новый тред в начало
 
-    // --- Добавление товара ---
-    else if (msg.type === 'addProduct') {
-      if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
-      const { name, description, price, category } = msg;
-      if (!name || !description || isNaN(price) || !category) {
-        return ws.send(JSON.stringify({ type: 'addProductError', message: 'Некорректные данные' }));
-      }
-      const product = {
-        id: genId(), name, description, price: +price, category, seller: currentUser,
-        createdAt: new Date().toISOString()
-      };
-      data.products.push(product);
-      saveData();
-      const broadcast = JSON.stringify({ type: 'newProduct', product });
-      wss.clients.forEach(c => c.readyState === WebSocket.OPEN && c.send(broadcast));
-    }
-
-    // --- Глобальный чат ---
-    else if (msg.type === 'globalMessage') {
-      if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
-      broadcastGlobalMessage({ from: currentUser, text: msg.text, time: new Date().toISOString() });
-    }
-
-    // --- Открыть приватный чат ---
-    else if (msg.type === 'startPrivateChat') {
-      if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
-      const { withUser } = msg;
-      const roomId = getOrCreatePrivateRoom(currentUser, withUser);
-      const history = data.privateMessages[roomId] || [];
-      ws.send(JSON.stringify({ type: 'privateChatHistory', roomId, withUser, messages: history }));
-      sendToUser(withUser, { type: 'privateChatOpened', roomId, withUser: currentUser });
-    }
-
-    // --- Приватное сообщение ---
-    else if (msg.type === 'privateMessage') {
-      if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
-      sendPrivateMessage(msg.roomId, currentUser, msg.text);
-    }
-  });
-
-  ws.on('close', () => {
-    if (currentUser) {
-      onlineUsers.delete(currentUser);
-      broadcastOnlineCount();
-    }
-  });
+    res.status(201).json(opPost);
 });
 
-// ================== HTML ==================
-function getHTML() {
-  return `<!DOCTYPE html>
+// Ответить в тред
+app.post('/api/board/:boardId/thread/:threadId', upload.single('image'), (req, res) => {
+    const board = boards[req.params.boardId];
+    if (!board) return res.status(404).json({ error: 'Доска не найдена' });
+
+    const thread = board.threads.find(t => t.id == req.params.threadId);
+    if (!thread) return res.status(404).json({ error: 'Тред не найден' });
+
+    const { name, comment } = req.body;
+    if (!comment && !req.file) {
+        return res.status(400).json({ error: 'Пост не может быть пустым' });
+    }
+
+    const replyPost = createPost(name, comment, req.file, false);
+    thread.replies.push(replyPost);
+
+    res.status(201).json(replyPost);
+});
+
+// Запуск сервера
+app.listen(PORT, () => {
+    console.log(`Server matrix loaded on http://localhost:${PORT}`);
+});
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TrueShop | Неоновый маркет</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0a0a14;--card-bg:rgba(20,20,35,0.85);--neon-cyan:#00ffff;--neon-magenta:#ff00ff;--neon-green:#00ff00;--text:#e0e0e0;--dark-text:#888;--radius:12px}
-body{background:var(--bg);font-family:'Courier New',monospace;color:var(--text);overflow:hidden;height:100vh;display:flex;flex-direction:column}
-@keyframes glowPulse{0%,100%{text-shadow:0 0 7px var(--neon-cyan),0 0 20px var(--neon-cyan)}50%{text-shadow:0 0 20px var(--neon-cyan),0 0 35px var(--neon-cyan)}}
-@keyframes borderGlow{0%,100%{border-color:var(--neon-cyan);box-shadow:0 0 5px var(--neon-cyan)}50%{border-color:var(--neon-magenta);box-shadow:0 0 15px var(--neon-magenta)}}
-#login-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(5,5,15,0.95);display:flex;align-items:center;justify-content:center;z-index:999}
-.login-box{background:var(--card-bg);border:2px solid var(--neon-cyan);border-radius:var(--radius);padding:3rem 2.5rem;width:380px;box-shadow:0 0 30px rgba(0,255,255,0.4);animation:borderGlow 3s infinite alternate}
-.login-box h1{text-align:center;font-size:2.4rem;margin-bottom:1.5rem;color:var(--neon-cyan);animation:glowPulse 2s infinite}
-.login-box input{width:100%;padding:12px;margin:8px 0;background:#111122;border:1px solid var(--neon-cyan);color:var(--neon-cyan);border-radius:5px;font-family:inherit;font-size:14px;outline:none;transition:all 0.3s}
-.login-box input:focus{border-color:var(--neon-magenta);box-shadow:0 0 10px var(--neon-magenta)}
-.login-box button{width:100%;padding:12px;margin-top:15px;background:transparent;border:2px solid var(--neon-cyan);color:var(--neon-cyan);font-weight:bold;font-size:16px;border-radius:8px;cursor:pointer;transition:all 0.3s;text-transform:uppercase;letter-spacing:2px}
-.login-box button:hover{background:rgba(0,255,255,0.1);box-shadow:0 0 20px var(--neon-cyan)}
-.error-msg{color:#ff4444;font-size:14px;text-align:center;margin-top:10px}
-.success-msg{color:#44ff44;text-align:center;margin-top:10px}
-#app{display:none;flex:1;flex-direction:column;overflow:hidden}
-.top-bar{background:#0f0f1e;padding:15px 25px;display:flex;align-items:center;gap:20px;border-bottom:1px solid #1a1a3a;flex-wrap:wrap}
-.top-bar .logo{font-size:1.8rem;font-weight:bold;color:var(--neon-cyan);animation:glowPulse 2s infinite}
-.search-box{flex:1;min-width:200px;background:#111122;border:1px solid var(--neon-cyan);padding:8px 15px;border-radius:5px;color:var(--neon-cyan);font-family:inherit;font-size:14px;outline:none}
-.category-select{background:#111122;border:1px solid var(--neon-cyan);padding:8px;color:var(--neon-cyan);border-radius:5px;font-family:inherit;cursor:pointer}
-.online-badge{background:#1a1a3a;padding:8px 16px;border-radius:20px;border:1px solid var(--neon-green);color:var(--neon-green);font-weight:bold;white-space:nowrap}
-.btn{background:transparent;border:2px solid var(--neon-cyan);color:var(--neon-cyan);padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:bold;transition:all 0.3s;font-family:inherit;text-transform:uppercase}
-.btn:hover{box-shadow:0 0 15px var(--neon-cyan)}
-.btn.magenta{border-color:var(--neon-magenta);color:var(--neon-magenta)}
-.btn.magenta:hover{box-shadow:0 0 15px var(--neon-magenta)}
-.btn.green{border-color:var(--neon-green);color:var(--neon-green)}
-.btn.green:hover{box-shadow:0 0 15px var(--neon-green)}
-.product-grid{flex:1;overflow-y:auto;padding:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
-.product-card{background:var(--card-bg);border:2px solid var(--neon-cyan);border-radius:var(--radius);padding:20px;display:flex;flex-direction:column;gap:10px;transition:transform 0.2s,box-shadow 0.2s;animation:cardAppear 0.4s ease-out}
-@keyframes cardAppear{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.product-card:hover{transform:translateY(-5px);box-shadow:0 0 30px rgba(0,255,255,0.5)}
-.product-card .name{font-size:1.2rem;font-weight:bold;color:var(--neon-cyan)}
-.product-card .desc{font-size:0.9rem;color:#aaa;flex:1}
-.product-card .price{font-size:1.4rem;font-weight:bold;color:var(--neon-green)}
-.product-card .meta{font-size:0.8rem;color:var(--dark-text);display:flex;justify-content:space-between}
-.product-card .actions{display:flex;gap:10px;margin-top:5px}
-.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);justify-content:center;align-items:center;z-index:100}
-.modal.active{display:flex}
-.modal-content{background:var(--bg);border:2px solid var(--neon-cyan);border-radius:var(--radius);width:450px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 0 40px rgba(0,255,255,0.5)}
-.modal-header{padding:15px 20px;border-bottom:1px solid #1a1a3a;display:flex;justify-content:space-between;align-items:center}
-.modal-header h3{color:var(--neon-cyan)}
-.close-btn{background:none;border:none;color:var(--neon-magenta);font-size:1.5rem;cursor:pointer}
-.modal-body{flex:1;overflow-y:auto;padding:15px}
-.modal-footer{padding:10px;border-top:1px solid #1a1a3a;display:flex;gap:10px}
-.modal-footer input{flex:1;background:#111122;border:1px solid var(--neon-cyan);padding:8px;color:var(--neon-cyan);border-radius:5px;font-family:inherit}
-.chat-message{margin-bottom:10px}
-.chat-message .sender{font-weight:bold;color:var(--neon-magenta)}
-.chat-message .time{font-size:0.7rem;color:#555;margin-left:10px}
-.chat-message .text{color:#ccc;word-wrap:break-word}
-@media(max-width:600px){.top-bar{flex-direction:column;align-items:stretch}.product-grid{grid-template-columns:1fr}}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON_CHAN // Анонимный Кибер-Форум</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
+    <header class="neon-header">
+        <h1 class="neon-logo" data-text="NEON_CHAN">NEON_CHAN</h1>
+        <nav class="board-nav">
+            [ <a href="#" onclick="switchBoard('b')">/b/</a> ]
+            [ <a href="#" onclick="switchBoard('tech')">/tech/</a> ]
+            [ <a href="#" onclick="switchBoard('pr')">/pr/</a> ]
+        </nav>
+        <div class="current-board-title">Текущая доска: <span id="board-name">/b/</span></div>
+    </header>
 
-<div id="login-overlay">
-  <div class="login-box">
-    <h1>TrueShop</h1>
-    <input type="text" id="login-username" placeholder="Логин" autocomplete="off">
-    <input type="password" id="login-password" placeholder="Пароль">
-    <button id="login-btn">Войти</button>
-    <button id="register-btn" class="btn magenta" style="margin-top:10px;">Регистрация</button>
-    <div id="login-error" class="error-msg"></div>
-    <div id="login-success" class="success-msg"></div>
-  </div>
-</div>
+    <main class="container">
+        <section class="form-container neon-border">
+            <h3>[ СОЗДАТЬ НОВЫЙ ТРЕД ]</h3>
+            <form id="new-thread-form" onsubmit="createNewThread(event)">
+                <div class="input-group">
+                    <input type="text" id="author-name" placeholder="Аноним" autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <textarea id="thread-comment" placeholder="Текст послания в матрицу..." required></textarea>
+                </div>
+                <div class="form-actions">
+                    <label class="cyber-file-upload">
+                        <input type="file" id="thread-image" accept="image/*">
+                        <span>[ ВЫБРАТЬ ФАЙЛ ]</span>
+                    </label>
+                    <button type="submit" class="neon-btn">ОТПРАВИТЬ</button>
+                </div>
+            </form>
+        </section>
 
-<div id="app">
-  <div class="top-bar">
-    <div class="logo">TRUESHOP</div>
-    <input type="text" id="search-input" class="search-box" placeholder="Поиск товаров...">
-    <select id="category-filter" class="category-select">
-      <option value="all">Все категории</option>
-      <option value="virus">Вирусы</option>
-      <option value="recipe">Рецепты</option>
-    </select>
-    <div class="online-badge" id="online-count">0 онлайн</div>
-    <button id="global-chat-btn" class="btn">Глобальный чат</button>
-    <button id="add-product-btn" class="btn green">+ Товар</button>
-    <button id="logout-btn" class="btn magenta">Выйти</button>
-  </div>
-  <div class="product-grid" id="product-grid"></div>
-</div>
+        <section id="threads-container"></section>
+    </main>
 
-<div id="global-chat-modal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header"><h3>Глобальный чат</h3><button class="close-btn" id="close-global-chat">&times;</button></div>
-    <div class="modal-body" id="global-chat-messages"></div>
-    <div class="modal-footer">
-      <input type="text" id="global-chat-input" placeholder="Сообщение...">
-      <button id="send-global-btn" class="btn">Отпр.</button>
+    <div id="reply-modal" class="modal">
+        <div class="modal-content neon-border">
+            <span class="close-btn" onclick="closeReplyModal()">&times;</span>
+            <h3>[ ОТВЕТИТЬ В ТРЕД #<span id="modal-thread-id"></span> ]</h3>
+            <form id="reply-form" onsubmit="submitReply(event)">
+                <input type="text" id="reply-name" placeholder="Аноним" autocomplete="off">
+                <textarea id="reply-comment" placeholder="Ваш ответ..." required></textarea>
+                <div class="form-actions">
+                    <label class="cyber-file-upload">
+                        <input type="file" id="reply-image" accept="image/*">
+                        <span>[ ФАЙЛ ]</span>
+                    </label>
+                    <button type="submit" class="neon-btn">ОТВЕТИТЬ</button>
+                </div>
+            </form>
+        </div>
     </div>
-  </div>
-</div>
-
-<div id="private-chat-modal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header"><h3 id="private-chat-title">Чат с ...</h3><button class="close-btn" id="close-private-chat">&times;</button></div>
-    <div class="modal-body" id="private-chat-messages"></div>
-    <div class="modal-footer">
-      <input type="text" id="private-chat-input" placeholder="Сообщение...">
-      <button id="send-private-btn" class="btn">Отпр.</button>
-    </div>
-  </div>
-</div>
-
-<div id="add-product-modal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header"><h3>Новый товар</h3><button class="close-btn" id="close-add-product">&times;</button></div>
-    <div class="modal-body">
-      <input type="text" id="new-product-name" placeholder="Название" style="width:100%;margin:5px 0;background:#111122;border:1px solid var(--neon-cyan);color:var(--neon-cyan);padding:8px;border-radius:5px">
-      <textarea id="new-product-desc" placeholder="Описание" rows="4" style="width:100%;margin:5px 0;background:#111122;border:1px solid var(--neon-cyan);color:var(--neon-cyan);padding:8px;border-radius:5px"></textarea>
-      <input type="number" id="new-product-price" placeholder="Цена (₿)" step="0.01" style="width:100%;margin:5px 0;background:#111122;border:1px solid var(--neon-cyan);color:var(--neon-cyan);padding:8px;border-radius:5px">
-      <select id="new-product-category" class="category-select" style="width:100%;margin:5px 0"><option value="virus">Вирусы</option><option value="recipe">Рецепты</option></select>
-      <div id="add-product-error" style="color:red;font-size:14px"></div>
-    </div>
-    <div class="modal-footer"><button id="submit-product-btn" class="btn green">Выложить</button></div>
-  </div>
-</div>
-
-<script>
-let ws, currentUser = null, token = null, products = [], onlineCount = 0, activePrivateRoom = null;
-
-const loginOverlay = document.getElementById('login-overlay');
-const appDiv = document.getElementById('app');
-const loginBtn = document.getElementById('login-btn');
-const registerBtn = document.getElementById('register-btn');
-const loginUsername = document.getElementById('login-username');
-const loginPassword = document.getElementById('login-password');
-const loginError = document.getElementById('login-error');
-const loginSuccess = document.getElementById('login-success');
-
-const searchInput = document.getElementById('search-input');
-const categoryFilter = document.getElementById('category-filter');
-const onlineCountEl = document.getElementById('online-count');
-const productGrid = document.getElementById('product-grid');
-const logoutBtn = document.getElementById('logout-btn');
-const globalChatBtn = document.getElementById('global-chat-btn');
-const addProductBtn = document.getElementById('add-product-btn');
-
-const globalChatModal = document.getElementById('global-chat-modal');
-const closeGlobalChat = document.getElementById('close-global-chat');
-const globalChatMessages = document.getElementById('global-chat-messages');
-const globalChatInput = document.getElementById('global-chat-input');
-const sendGlobalBtn = document.getElementById('send-global-btn');
-
-const privateChatModal = document.getElementById('private-chat-modal');
-const closePrivateChat = document.getElementById('close-private-chat');
-const privateChatTitle = document.getElementById('private-chat-title');
-const privateChatMessages = document.getElementById('private-chat-messages');
-const privateChatInput = document.getElementById('private-chat-input');
-const sendPrivateBtn = document.getElementById('send-private-btn');
-
-const addProductModal = document.getElementById('add-product-modal');
-const closeAddProduct = document.getElementById('close-add-product');
-const submitProductBtn = document.getElementById('submit-product-btn');
-const newProductName = document.getElementById('new-product-name');
-const newProductDesc = document.getElementById('new-product-desc');
-const newProductPrice = document.getElementById('new-product-price');
-const newProductCategory = document.getElementById('new-product-category');
-const addProductError = document.getElementById('add-product-error');
-
-function connectWebSocket() {
-  ws = new WebSocket('ws://' + location.host);
-  ws.onopen = () => console.log('WebSocket подключен');
-  ws.onmessage = (e) => {
-    try { handleMessage(JSON.parse(e.data)); } catch {}
-  };
-  ws.onclose = () => {
-    if (currentUser) {
-      alert('Соединение потеряно. Обновите страницу.');
-      location.reload();
-    }
-  };
-}
-
-function handleMessage(msg) {
-  switch(msg.type) {
-    case 'authSuccess':
-      currentUser = msg.username; token = msg.token;
-      products = msg.products || []; onlineCount = msg.onlineCount || 0;
-      updateOnlineBadge(); renderProducts();
-      if (msg.globalMessages) {
-        globalChatMessages.innerHTML = '';
-        msg.globalMessages.forEach(m => appendGlobalMessage(m));
-      }
-      loginOverlay.style.display = 'none';
-      appDiv.style.display = 'flex';
-      break;
-    case 'authError': loginError.textContent = msg.message; break;
-    case 'regError': loginError.textContent = msg.message; loginSuccess.textContent = ''; break;
-    case 'onlineCount': onlineCount = msg.count; updateOnlineBadge(); break;
-    case 'newProduct': products.push(msg.product); renderProducts(); break;
-    case 'globalMessage': appendGlobalMessage(msg.message); break;
-    case 'privateChatHistory':
-      activePrivateRoom = { roomId: msg.roomId, withUser: msg.withUser };
-      privateChatTitle.textContent = 'Чат с ' + msg.withUser;
-      privateChatMessages.innerHTML = '';
-      if (msg.messages) msg.messages.forEach(m => appendPrivateMessage(m));
-      privateChatModal.classList.add('active');
-      break;
-    case 'privateMessage':
-      if (activePrivateRoom && activePrivateRoom.roomId === msg.roomId) appendPrivateMessage(msg.message);
-      break;
-    case 'addProductError': addProductError.textContent = msg.message; break;
-  }
-}
-
-function updateOnlineBadge() { onlineCountEl.textContent = onlineCount + ' онлайн'; }
-
-function renderProducts() {
-  const searchText = searchInput.value.toLowerCase();
-  const cat = categoryFilter.value;
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(searchText) && (cat === 'all' || p.category === cat)
-  );
-  productGrid.innerHTML = '';
-  filtered.forEach(p => {
-    const card = document.createElement('div');
-    card.className = 'product-card';
-    card.innerHTML = '<div class="name">'+esc(p.name)+'</div><div class="desc">'+esc(p.description)+'</div><div class="price">'+p.price.toFixed(2)+' ₿</div><div class="meta"><span>'+esc(p.seller)+'</span><span>'+new Date(p.createdAt).toLocaleDateString()+'</span></div><div class="actions">'+(p.seller!==currentUser?'<button class="btn buy-btn" data-seller="'+esc(p.seller)+'">Купить</button>':'')+'</div>';
-    productGrid.appendChild(card);
-  });
-  document.querySelectorAll('.buy-btn').forEach(b => b.addEventListener('click', e => startPrivateChat(e.target.dataset.seller)));
-}
-
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function appendGlobalMessage(msg) {
-  const div = document.createElement('div'); div.className = 'chat-message';
-  div.innerHTML = '<span class="sender">'+esc(msg.from)+'</span><span class="time">'+fmtTime(msg.time)+'</span><br><span class="text">'+esc(msg.text)+'</span>';
-  globalChatMessages.appendChild(div);
-  globalChatMessages.scrollTop = globalChatMessages.scrollHeight;
-}
-function appendPrivateMessage(msg) {
-  const div = document.createElement('div'); div.className = 'chat-message';
-  div.innerHTML = '<span class="sender">'+esc(msg.from)+'</span><span class="time">'+fmtTime(msg.time)+'</span><br><span class="text">'+esc(msg.text)+'</span>';
-  privateChatMessages.appendChild(div);
-  privateChatMessages.scrollTop = privateChatMessages.scrollHeight;
-}
-function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); } catch { return ''; } }
-
-function startPrivateChat(seller) {
-  ws.send(JSON.stringify({ type: 'startPrivateChat', token, withUser: seller }));
-}
-
-// Проверка готовности WebSocket перед отправкой
-function ensureConnection(action) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    loginError.textContent = 'Нет соединения с сервером. Запустите сервер (node trueshop.js) и обновите страницу.';
-    return false;
-  }
-  return true;
-}
-
-loginBtn.addEventListener('click', () => {
-  const u = loginUsername.value.trim(), p = loginPassword.value.trim();
-  if (!u || !p) { loginError.textContent = 'Заполните все поля'; return; }
-  if (!ensureConnection()) return;
-  ws.send(JSON.stringify({ type: 'auth', username: u, password: p }));
-  loginError.textContent = ''; loginSuccess.textContent = '';
-});
-
-registerBtn.addEventListener('click', () => {
-  const u = loginUsername.value.trim(), p = loginPassword.value.trim();
-  if (!u || !p) { loginError.textContent = 'Заполните все поля'; return; }
-  if (!ensureConnection()) return;
-  ws.send(JSON.stringify({ type: 'register', username: u, password: p }));
-  loginError.textContent = ''; loginSuccess.textContent = '';
-});
-
-logoutBtn.addEventListener('click', () => {
-  if (ws) ws.close();
-  currentUser = null; token = null;
-  loginOverlay.style.display = 'flex'; appDiv.style.display = 'none';
-  loginUsername.value = ''; loginPassword.value = '';
-  loginError.textContent = ''; loginSuccess.textContent = '';
-  connectWebSocket();
-});
-
-searchInput.addEventListener('input', renderProducts);
-categoryFilter.addEventListener('change', renderProducts);
-
-globalChatBtn.addEventListener('click', () => globalChatModal.classList.add('active'));
-closeGlobalChat.addEventListener('click', () => globalChatModal.classList.remove('active'));
-sendGlobalBtn.addEventListener('click', () => {
-  const text = globalChatInput.value.trim();
-  if (!text) return;
-  if (!ensureConnection()) return;
-  ws.send(JSON.stringify({ type: 'globalMessage', token, text }));
-  globalChatInput.value = '';
-});
-globalChatInput.addEventListener('keypress', e => e.key==='Enter' && sendGlobalBtn.click());
-
-closePrivateChat.addEventListener('click', () => { privateChatModal.classList.remove('active'); activePrivateRoom = null; });
-sendPrivateBtn.addEventListener('click', () => {
-  if (!activePrivateRoom) return;
-  const text = privateChatInput.value.trim();
-  if (!text) return;
-  if (!ensureConnection()) return;
-  ws.send(JSON.stringify({ type: 'privateMessage', token, roomId: activePrivateRoom.roomId, text }));
-  privateChatInput.value = '';
-});
-privateChatInput.addEventListener('keypress', e => e.key==='Enter' && sendPrivateBtn.click());
-
-addProductBtn.addEventListener('click', () => addProductModal.classList.add('active'));
-closeAddProduct.addEventListener('click', () => addProductModal.classList.remove('active'));
-submitProductBtn.addEventListener('click', () => {
-  const name = newProductName.value.trim();
-  const desc = newProductDesc.value.trim();
-  const price = parseFloat(newProductPrice.value);
-  const cat = newProductCategory.value;
-  if (!name || !desc || isNaN(price) || price<0) { addProductError.textContent = 'Заполните все поля корректно'; return; }
-  if (!ensureConnection()) return;
-  ws.send(JSON.stringify({ type: 'addProduct', token, name, description: desc, price, category: cat }));
-  addProductModal.classList.remove('active');
-  newProductName.value=''; newProductDesc.value=''; newProductPrice.value='';
-  addProductError.textContent='';
-});
-
-connectWebSocket();
-</script>
+    <script src="app.js"></script>
 </body>
-</html>`;
+</html>
+:root {
+    --bg-color: #0a0a12;
+    --panel-bg: #121224;
+    --neon-cyan: #00f0ff;
+    --neon-pink: #ff0055;
+    --neon-green: #39ff14;
+    --text-color: #e0e0ff;
+    --text-muted: #7070a0;
+    --neon-glow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.3);
+    --pink-glow: 0 0 10px rgba(ff, 0, 85, 0.5);
 }
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('TrueShop запущен на http://localhost:' + PORT));
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Roboto Mono', monospace;
+    padding-bottom: 50px;
+    overflow-x: hidden;
+}
+
+/* Кастомный скроллбар */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: var(--bg-color);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--neon-cyan);
+    border-radius: 4px;
+    box-shadow: var(--neon-glow);
+}
+
+/* Шапка сайта */
+.neon-header {
+    background: var(--panel-bg);
+    border-bottom: 2px solid var(--neon-cyan);
+    box-shadow: var(--neon-glow);
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.neon-logo {
+    font-family: 'Orbitron', sans-serif;
+    color: #fff;
+    font-size: 2.5rem;
+    letter-spacing: 5px;
+    text-shadow: 0 0 10px var(--neon-cyan), 0 0 30px var(--neon-cyan);
+    position: relative;
+}
+
+.board-nav a {
+    color: var(--neon-pink);
+    text-decoration: none;
+    font-weight: bold;
+    transition: 0.3s;
+}
+
+.board-nav a:hover {
+    color: var(--neon-cyan);
+    text-shadow: var(--neon-glow);
+}
+
+.current-board-title {
+    margin-top: 10px;
+    color: var(--text-muted);
+}
+
+.current-board-title span {
+    color: var(--neon-green);
+    text-shadow: 0 0 5px var(--neon-green);
+}
+
+/* Контейнеры */
+.container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.neon-border {
+    border: 1px solid var(--neon-cyan);
+    background: var(--panel-bg);
+    box-shadow: var(--neon-glow);
+    padding: 20px;
+    margin-bottom: 30px;
+    position: relative;
+}
+
+/* Формы */
+h3 {
+    font-family: 'Orbitron', sans-serif;
+    color: var(--neon-cyan);
+    margin-bottom: 15px;
+}
+
+.input-group input, .input-group textarea, .modal-content textarea, .modal-content input {
+    width: 100%;
+    background: #05050a;
+    border: 1px solid var(--text-muted);
+    color: var(--text-color);
+    padding: 10px;
+    margin-bottom: 15px;
+    font-family: inherit;
+    transition: 0.3s;
+}
+
+.input-group input:focus, .input-group textarea:focus {
+    border-color: var(--neon-pink);
+    outline: none;
+    box-shadow: var(--pink-glow);
+}
+
+.form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cyber-file-upload input[type="file"] {
+    display: none;
+}
+
+.cyber-file-upload span {
+    color: var(--neon-green);
+    cursor: pointer;
+    border: 1px dashed var(--neon-green);
+    padding: 8px 15px;
+    transition: 0.3s;
+}
+
+.cyber-file-upload span:hover {
+    background: rgba(57, 255, 20, 0.1);
+    box-shadow: 0 0 10px rgba(57, 255, 20, 0.4);
+}
+
+.neon-btn {
+    background: transparent;
+    border: 1px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    padding: 8px 20px;
+    cursor: pointer;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: bold;
+    transition: 0.3s;
+}
+
+.neon-btn:hover {
+    background: var(--neon-cyan);
+    color: #000;
+    box-shadow: var(--neon-glow);
+}
+
+/* Треды и Посты */
+.thread-card {
+    border-left: 4px solid var(--neon-pink);
+    margin-bottom: 40px;
+    padding-left: 15px;
+}
+
+.post {
+    background: var(--panel-bg);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    padding: 15px;
+    margin-bottom: 10px;
+}
+
+.post.op-post {
+    border: 1px solid var(--neon-cyan);
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.1);
+}
+
+.post-header {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.post-author {
+    color: var(--neon-pink);
+    font-weight: bold;
+}
+
+.post-id {
+    color: var(--neon-cyan);
+}
+
+.post-body {
+    display: flex;
+    gap: 20px;
+}
+
+.post-img {
+    max-width: 150px;
+    max-height: 150px;
+    border: 1px solid var(--text-muted);
+    object-fit: cover;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.post-img:hover {
+    border-color: var(--neon-cyan);
+    box-shadow: var(--neon-glow);
+}
+
+.post-text {
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.replies-container {
+    margin-left: 40px;
+}
+
+.reply-link {
+    color: var(--neon-green);
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+/* Модальное окно */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    width: 90%;
+    max-width: 500px;
+}
+
+.close-btn {
+    float: right;
+    color: var(--neon-pink);
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+// app.js
+const API_URL = 'http://localhost:3000/api';
+let currentBoard = 'b';
+let activeThreadId = null;
+
+// Загрузка доски при старте страницы
+document.addEventListener('DOMContentLoaded', () => {
+    switchBoard(currentBoard);
+});
+
+// Переключение досок
+async function switchBoard(boardId) {
+    currentBoard = boardId;
+    document.getElementById('board-name').innerText = `/${boardId}/`;
+    await fetchThreads();
+}
+
+// Получение тредов с бэкенда и их отрисовка
+async function fetchThreads() {
+    const container = document.getElementById('threads-container');
+    container.innerHTML = '<p style="color: var(--neon-cyan)">Синхронизация с матрицей...</p>';
+
+    try {
+        const response = await fetch(`${API_URL}/board/${currentBoard}`);
+        if (!response.ok) throw new Error('Ошибка сети');
+        const board = await response.json();
+        
+        container.innerHTML = '';
+        
+        if (board.threads.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-muted)">В этой структуре пусто. Создайте первый тред.</p>';
+            return;
+        }
+
+        board.threads.forEach(thread => {
+            const threadCard = document.createElement('div');
+            threadCard.className = 'thread-card';
+            
+            // Рендер OP-поста (главного поста треда)
+            let imgHtml = thread.file ? `<img src="${API_URL.replace('/api', '')}${thread.file}" class="post-img" onclick="expandImage(this)">` : '';
+            
+            let threadHtml = `
+                <div class="post op-post">
+                    <div class="post-header">
+                        <span class="post-author">${escapeHtml(thread.name)}</span>
+                        <span>${thread.time}</span>
+                        <span class="post-id">№${thread.id}</span>
+                        <a class="reply-link" onclick="openReplyModal(${thread.id})">[ ОТВЕТИТЬ ]</a>
+                    </div>
+                    <div class="post-body">
+                        ${imgHtml}
+                        <div class="post-text">${escapeHtml(thread.comment)}</div>
+                    </div>
+                </div>
+                <div class="replies-container">
+            `;
+
+            // Рендер ответов внутри треда
+            thread.replies.forEach(reply => {
+                let replyImgHtml = reply.file ? `<img src="${API_URL.replace('/api', '')}${reply.file}" class="post-img" onclick="expandImage(this)">` : '';
+                threadHtml += `
+                    <div class="post">
+                        <div class="post-header">
+                            <span class="post-author">${escapeHtml(reply.name)}</span>
+                            <span>${reply.time}</span>
+                            <span class="post-id">№${reply.id}</span>
+                        </div>
+                        <div class="post-body">
+                            ${replyImgHtml}
+                            <div class="post-text">${escapeHtml(reply.comment)}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            threadHtml += `</div>`;
+            threadCard.innerHTML = threadHtml;
+            container.appendChild(threadCard);
+        });
+
+    } catch (error) {
+        container.innerHTML = '<p style="color: var(--neon-pink)">Ошибка слияния данных с бэкендом.</p>';
+        console.error(error);
+    }
+}
+
+// Создание нового треда
+async function createNewThread(event) {
+    event.preventDefault();
+    const name = document.getElementById('author-name').value;
+    const comment = document.getElementById('thread-comment').value;
+    const imageFile = document.getElementById('thread-image').files[0];
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('comment', comment);
+    if (imageFile) formData.append('image', imageFile);
+
+    try {
+        const response = await fetch(`${API_URL}/board/${currentBoard}/thread`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (response.ok) {
+            document.getElementById('new-thread-form').reset();
+            fetchThreads();
+        } else {
+            alert('Ошибка при создании треда');
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+// Управление модальным окном ответов
+function openReplyModal(threadId) {
+    activeThreadId = threadId;
+    document.getElementById('modal-thread-id').innerText = threadId;
+    document.getElementById('reply-modal').style.display = 'flex';
+}
+
+function closeReplyModal() {
+    document.getElementById('reply-modal').style.display = 'none';
+    document.getElementById('reply-form').reset();
+}
+
+// Отправка ответа в тред
+async function submitReply(event) {
+    event.preventDefault();
+    const name = document.getElementById('reply-name').value;
+    const comment = document.getElementById('reply-comment').value;
+    const imageFile = document.getElementById('reply-image').files[0];
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('comment', comment);
+    if (imageFile) formData.append('image', imageFile);
+
+    try {
+        const response = await fetch(`${API_URL}/board/${currentBoard}/thread/${activeThreadId}`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (response.ok) {
+            closeReplyModal();
+            fetchThreads();
+        } else {
+            alert('Не удалось отправить ответ');
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+// Увеличение картинок по клику (как на оригинальном имиджборде)
+function expandImage(img) {
+    if (img.style.maxWidth === '150px' || img.style.maxWidth === '') {
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = 'none';
+    } else {
+        img.style.maxWidth = '150px';
+        img.style.maxHeight = '150px';
+    }
+}
+
+// Защита от XSS (внедрения вредоносного кода через посты)
+function escapeHtml(text) {
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}

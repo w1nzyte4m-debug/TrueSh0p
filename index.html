@@ -1,7 +1,5 @@
-*
- * TrueShop - Web Edition
- * Полнофункциональный интернет-магазин с чатами, онлайн-статусом и неоновым дизайном.
- * Автор: TrueShop Dev
+/*
+ * TrueShop - Web Edition (исправленная регистрация с авто-входом)
  * Запуск: npm install ws && node trueshop.js
  */
 
@@ -14,19 +12,18 @@ const WebSocket = require('ws');
 const DATA_FILE = 'data.json';
 
 let data = {
-  users: {},          // username -> { password, token, ... }
-  products: [],       // массив товаров
-  globalMessages: [], // последние 50 сообщений глобального чата
-  privateMessages: {} // roomId -> [{from, text, time}]
+  users: {},
+  products: [],
+  globalMessages: [],
+  privateMessages: {}
 };
 
-// Загрузка из файла
 try {
   if (fs.existsSync(DATA_FILE)) {
     const raw = fs.readFileSync(DATA_FILE, 'utf8');
     data = JSON.parse(raw);
   } else {
-    // Инициализация тестовыми данными
+    // Тестовые аккаунты и товары
     data.users['admin'] = { password: 'admin', token: null };
     data.users['hacker'] = { password: '1234', token: null };
     data.products.push({
@@ -96,7 +93,7 @@ const server = http.createServer((req, res) => {
 
 // ================== WEBSOCKET СЕРВЕР ==================
 const wss = new WebSocket.Server({ server });
-const onlineUsers = new Map(); // username -> WebSocket соединение
+const onlineUsers = new Map(); // username -> WebSocket
 
 function broadcastOnlineCount() {
   const count = onlineUsers.size;
@@ -108,7 +105,6 @@ function broadcastOnlineCount() {
   });
 }
 
-// Отправка сообщения конкретному пользователю (если онлайн)
 function sendToUser(username, messageObj) {
   const ws = onlineUsers.get(username);
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -116,12 +112,10 @@ function sendToUser(username, messageObj) {
   }
 }
 
-// Рассылка глобального сообщения всем (включая сохранение)
 function broadcastGlobalMessage(msg) {
   data.globalMessages.push(msg);
   if (data.globalMessages.length > 100) data.globalMessages.shift();
   saveData();
-
   const payload = JSON.stringify({ type: 'globalMessage', message: msg });
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -130,7 +124,6 @@ function broadcastGlobalMessage(msg) {
   });
 }
 
-// Создание или получение комнаты приватного чата
 function getRoomId(user1, user2) {
   return [user1, user2].sort().join('::');
 }
@@ -149,7 +142,6 @@ function sendPrivateMessage(roomId, from, text) {
   const msg = { from, text, time: new Date().toISOString() };
   room.push(msg);
   saveData();
-
   const payload = JSON.stringify({ type: 'privateMessage', roomId, message: msg });
   const users = roomId.split('::');
   users.forEach(username => {
@@ -157,7 +149,6 @@ function sendPrivateMessage(roomId, from, text) {
   });
 }
 
-// Обработчик новых подключений
 wss.on('connection', (ws) => {
   let currentUser = null;
 
@@ -169,12 +160,11 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // Аутентификация
+    // Авторизация
     if (msg.type === 'auth') {
       const { username, password } = msg;
       const user = data.users[username];
       if (user && user.password === password) {
-        // Генерируем токен (простой, демо)
         user.token = generateId();
         currentUser = username;
         onlineUsers.set(username, ws);
@@ -187,13 +177,12 @@ wss.on('connection', (ws) => {
           globalMessages: data.globalMessages.slice(-50),
           onlineCount: onlineUsers.size
         }));
-        // Уведомление всем о новом онлайне (можно не рассылать, просто обновить счётчик)
-        broadcastOnlineCount();
       } else {
         ws.send(JSON.stringify({ type: 'authError', message: 'Неверный логин или пароль' }));
       }
     }
-    // Регистрация
+
+    // Регистрация (исправленная — автоматический вход)
     else if (msg.type === 'register') {
       const { username, password } = msg;
       if (!username || !password) {
@@ -201,12 +190,27 @@ wss.on('connection', (ws) => {
       } else if (data.users[username]) {
         ws.send(JSON.stringify({ type: 'regError', message: 'Пользователь уже существует' }));
       } else {
+        // Создаём пользователя
         data.users[username] = { password, token: null };
         saveData();
-        ws.send(JSON.stringify({ type: 'regSuccess', message: 'Регистрация успешна' }));
+        // Сразу генерируем токен и авторизуем
+        const newUser = data.users[username];
+        newUser.token = generateId();
+        currentUser = username;
+        onlineUsers.set(username, ws);
+        broadcastOnlineCount();
+        ws.send(JSON.stringify({
+          type: 'authSuccess',
+          username,
+          token: newUser.token,
+          products: data.products,
+          globalMessages: data.globalMessages.slice(-50),
+          onlineCount: onlineUsers.size
+        }));
       }
     }
-    // Добавление товара (требуется токен)
+
+    // Добавление товара
     else if (msg.type === 'addProduct') {
       if (!currentUser || data.users[currentUser]?.token !== msg.token) {
         ws.send(JSON.stringify({ type: 'error', message: 'Не авторизован' }));
@@ -228,13 +232,13 @@ wss.on('connection', (ws) => {
       };
       data.products.push(product);
       saveData();
-      // Рассылаем новый товар всем
       const broadcast = JSON.stringify({ type: 'newProduct', product });
       wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) client.send(broadcast);
       });
     }
-    // Глобальное сообщение (чат)
+
+    // Глобальное сообщение
     else if (msg.type === 'globalMessage') {
       if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
       broadcastGlobalMessage({
@@ -243,12 +247,12 @@ wss.on('connection', (ws) => {
         time: new Date().toISOString()
       });
     }
-    // Начать приватный чат (при покупке или запросе)
+
+    // Начать приватный чат
     else if (msg.type === 'startPrivateChat') {
       if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
-      const { withUser } = msg;  // продавец
+      const { withUser } = msg;
       const roomId = getOrCreatePrivateRoom(currentUser, withUser);
-      // Отправляем историю запросившему
       const history = data.privateMessages[roomId] || [];
       ws.send(JSON.stringify({
         type: 'privateChatHistory',
@@ -256,16 +260,15 @@ wss.on('connection', (ws) => {
         withUser,
         messages: history
       }));
-      // Если второй пользователь онлайн, ему тоже можно отправить уведомление
       sendToUser(withUser, { type: 'privateChatOpened', roomId, withUser: currentUser });
     }
+
     // Приватное сообщение
     else if (msg.type === 'privateMessage') {
       if (!currentUser || data.users[currentUser]?.token !== msg.token) return;
       const { roomId, text } = msg;
       sendPrivateMessage(roomId, currentUser, text);
     }
-    // Отключение обрабатывается событием close
   });
 
   ws.on('close', () => {
@@ -276,7 +279,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-// ================== ФУНКЦИЯ ВОЗВРАТА HTML СТРАНИЦЫ ==================
+// ================== HTML-СТРАНИЦА ==================
 function getHTML() {
   return `<!DOCTYPE html>
 <html lang="ru">
@@ -285,7 +288,6 @@ function getHTML() {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TrueShop | Неоновый маркет</title>
 <style>
-/* ========== ОБЩИЙ СБРОС И БАЗОВЫЕ ПЕРЕМЕННЫЕ ========== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
   --bg: #0a0a14;
@@ -306,8 +308,6 @@ body {
   display: flex;
   flex-direction: column;
 }
-
-/* Неоновая анимация мерцания */
 @keyframes neonPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.8; }
@@ -320,8 +320,6 @@ body {
   0%, 100% { border-color: var(--neon-cyan); box-shadow: 0 0 5px var(--neon-cyan); }
   50% { border-color: var(--neon-magenta); box-shadow: 0 0 15px var(--neon-magenta); }
 }
-
-/* Слой входа (оверлей) */
 #login-overlay {
   position: fixed; top:0; left:0; width:100%; height:100%;
   background: rgba(5,5,15,0.95);
@@ -366,9 +364,8 @@ body {
 .error-msg { color: #ff4444; font-size: 14px; text-align: center; margin-top: 10px; }
 .success-msg { color: #44ff44; text-align: center; margin-top: 10px; }
 
-/* ОСНОВНОЙ ЛЭЙАУТ */
 #app {
-  display: none; /* скрыто до авторизации */
+  display: none;
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
 }
 .top-bar {
@@ -410,7 +407,6 @@ body {
 .btn.green { border-color: var(--neon-green); color: var(--neon-green); }
 .btn.green:hover { box-shadow: 0 0 15px var(--neon-green); }
 
-/* КОНТЕЙНЕР ТОВАРОВ */
 .product-grid {
   flex: 1; overflow-y: auto; padding: 20px;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -439,7 +435,6 @@ body {
 .product-card .meta { font-size: 0.8rem; color: var(--dark-text); display: flex; justify-content: space-between; }
 .product-card .actions { display: flex; gap: 10px; margin-top: 5px; }
 
-/* МОДАЛЬНЫЕ ОКНА (глобальный чат, приватный чат, добавление товара) */
 .modal {
   display: none; position: fixed; top:0; left:0; width:100%; height:100%;
   background: rgba(0,0,0,0.7); justify-content: center; align-items: center;
@@ -470,13 +465,11 @@ body {
   padding: 8px; color: var(--neon-cyan); border-radius: 5px; font-family: inherit;
 }
 
-/* Сообщения чата */
 .chat-message { margin-bottom: 10px; }
 .chat-message .sender { font-weight: bold; color: var(--neon-magenta); }
 .chat-message .time { font-size: 0.7rem; color: #555; margin-left: 10px; }
 .chat-message .text { color: #ccc; word-wrap: break-word; }
 
-/* Адаптив */
 @media (max-width: 600px) {
   .top-bar { flex-direction: column; align-items: stretch; }
   .product-grid { grid-template-columns: 1fr; }
@@ -485,7 +478,6 @@ body {
 </head>
 <body>
 
-<!-- Оверлей входа -->
 <div id="login-overlay">
   <div class="login-box">
     <h1>TrueShop</h1>
@@ -498,7 +490,6 @@ body {
   </div>
 </div>
 
-<!-- Основное приложение (скрыто) -->
 <div id="app">
   <div class="top-bar">
     <div class="logo">TRUESHOP</div>
@@ -516,7 +507,6 @@ body {
   <div class="product-grid" id="product-grid"></div>
 </div>
 
-<!-- Модалка глобального чата -->
 <div id="global-chat-modal" class="modal">
   <div class="modal-content">
     <div class="modal-header">
@@ -531,7 +521,6 @@ body {
   </div>
 </div>
 
-<!-- Модалка приватного чата -->
 <div id="private-chat-modal" class="modal">
   <div class="modal-content">
     <div class="modal-header">
@@ -546,7 +535,6 @@ body {
   </div>
 </div>
 
-<!-- Модалка добавления товара -->
 <div id="add-product-modal" class="modal">
   <div class="modal-content">
     <div class="modal-header">
@@ -570,15 +558,13 @@ body {
 </div>
 
 <script>
-// ================== КЛИЕНТСКАЯ ЛОГИКА ==================
 let ws;
 let currentUser = null;
 let token = null;
 let products = [];
 let onlineCount = 0;
-let activePrivateRoom = null; // { roomId, withUser }
+let activePrivateRoom = null;
 
-// DOM элементы
 const loginOverlay = document.getElementById('login-overlay');
 const appDiv = document.getElementById('app');
 const loginBtn = document.getElementById('login-btn');
@@ -618,7 +604,6 @@ const newProductPrice = document.getElementById('new-product-price');
 const newProductCategory = document.getElementById('new-product-category');
 const addProductError = document.getElementById('add-product-error');
 
-// Подключение WebSocket
 function connectWebSocket() {
   ws = new WebSocket('ws://' + location.host);
   ws.onopen = () => console.log('WebSocket подключен');
@@ -636,7 +621,6 @@ function connectWebSocket() {
   };
 }
 
-// Обработка входящих сообщений
 function handleMessage(msg) {
   switch(msg.type) {
     case 'authSuccess':
@@ -646,7 +630,6 @@ function handleMessage(msg) {
       onlineCount = msg.onlineCount || 0;
       updateOnlineBadge();
       renderProducts();
-      // Загружаем историю глобального чата
       if (msg.globalMessages) {
         globalChatMessages.innerHTML = '';
         msg.globalMessages.forEach(m => appendGlobalMessage(m));
@@ -657,11 +640,6 @@ function handleMessage(msg) {
 
     case 'authError':
       loginError.textContent = msg.message;
-      break;
-
-    case 'regSuccess':
-      loginSuccess.textContent = msg.message;
-      loginError.textContent = '';
       break;
 
     case 'regError':
@@ -684,7 +662,6 @@ function handleMessage(msg) {
       break;
 
     case 'privateChatHistory':
-      // Открываем приватный чат
       activePrivateRoom = { roomId: msg.roomId, withUser: msg.withUser };
       privateChatTitle.textContent = 'Чат с ' + msg.withUser;
       privateChatMessages.innerHTML = '';
@@ -692,15 +669,9 @@ function handleMessage(msg) {
       privateChatModal.classList.add('active');
       break;
 
-    case 'privateChatOpened':
-      // Просто уведомление (можно игнорировать)
-      break;
-
     case 'privateMessage':
       if (activePrivateRoom && activePrivateRoom.roomId === msg.roomId) {
         appendPrivateMessage(msg.message);
-      } else {
-        // Уведомление? (игнорируем)
       }
       break;
 
@@ -712,7 +683,6 @@ function handleMessage(msg) {
   }
 }
 
-// Функции рендеринга
 function updateOnlineBadge() {
   onlineCountEl.textContent = onlineCount + ' онлайн';
 }
@@ -739,7 +709,6 @@ function renderProducts() {
     productGrid.appendChild(card);
   });
 
-  // Обработчики кнопок "Купить"
   document.querySelectorAll('.buy-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const seller = e.target.dataset.seller;
@@ -779,13 +748,11 @@ function formatTime(isoString) {
   } catch(e) { return ''; }
 }
 
-// Запуск приватного чата
 function startPrivateChat(seller) {
   ws.send(JSON.stringify({ type: 'startPrivateChat', token, withUser: seller }));
 }
 
-// ================== ПРИВЯЗКА СОБЫТИЙ ==================
-// Вход
+// Кнопки
 loginBtn.addEventListener('click', () => {
   const username = loginUsername.value.trim();
   const password = loginPassword.value.trim();
@@ -798,7 +765,6 @@ loginBtn.addEventListener('click', () => {
   loginSuccess.textContent = '';
 });
 
-// Регистрация
 registerBtn.addEventListener('click', () => {
   const username = loginUsername.value.trim();
   const password = loginPassword.value.trim();
@@ -811,7 +777,6 @@ registerBtn.addEventListener('click', () => {
   loginSuccess.textContent = '';
 });
 
-// Выход
 logoutBtn.addEventListener('click', () => {
   if (ws) ws.close();
   currentUser = null;
@@ -822,14 +787,12 @@ logoutBtn.addEventListener('click', () => {
   loginPassword.value = '';
   loginError.textContent = '';
   loginSuccess.textContent = '';
-  connectWebSocket(); // переподключимся анонимно
+  connectWebSocket();
 });
 
-// Поиск и фильтрация
 searchInput.addEventListener('input', renderProducts);
 categoryFilter.addEventListener('change', renderProducts);
 
-// Глобальный чат
 globalChatBtn.addEventListener('click', () => globalChatModal.classList.add('active'));
 closeGlobalChat.addEventListener('click', () => globalChatModal.classList.remove('active'));
 sendGlobalBtn.addEventListener('click', sendGlobalMessage);
@@ -841,7 +804,6 @@ function sendGlobalMessage() {
   globalChatInput.value = '';
 }
 
-// Приватный чат
 closePrivateChat.addEventListener('click', () => {
   privateChatModal.classList.remove('active');
   activePrivateRoom = null;
@@ -856,7 +818,6 @@ function sendPrivateMessage() {
   privateChatInput.value = '';
 }
 
-// Добавление товара
 addProductBtn.addEventListener('click', () => addProductModal.classList.add('active'));
 closeAddProduct.addEventListener('click', () => addProductModal.classList.remove('active'));
 submitProductBtn.addEventListener('click', () => {
@@ -876,14 +837,14 @@ submitProductBtn.addEventListener('click', () => {
   addProductError.textContent = '';
 });
 
-// Инициализация
+// Старт
 connectWebSocket();
 </script>
 </body>
 </html>`;
 }
 
-// ================== ЗАПУСК СЕРВЕРА ==================
+// Запуск сервера
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log('TrueShop server running on http://localhost:' + PORT);

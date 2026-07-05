@@ -1,5 +1,5 @@
 /*
- * TKK Forum — Неоновый имиджборд с авторизацией и профилем
+ * TKK Forum — Надёжная авторизация, профили, неоновый имиджборд
  * Запуск: npm install ws formidable && node tkkforum.js
  */
 
@@ -20,7 +20,7 @@ const THREAD_BUMP_LIMIT = 500;
 
 // ================== ХРАНИЛИЩЕ ==================
 let store = {
-  users: {},        // username -> { password, token }
+  users: {},
   threads: [],
   nextThreadId: 1,
   nextPostId: 1
@@ -77,7 +77,7 @@ function bumpThread(thread) {
 
 // ================== WEBSOCKET ==================
 const wss = new WebSocket.Server({ noServer: true });
-const clients = new Map(); // ws -> { username, token }
+const clients = new Map();
 
 function broadcast(msg) {
   const data = JSON.stringify(msg);
@@ -95,7 +95,7 @@ wss.on('connection', (ws) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
-    // ==== Регистрация ====
+    // ==== Регистрация (с авто-входом) ====
     if (msg.type === 'register') {
       const { username, password } = msg;
       if (!username || !password) {
@@ -104,9 +104,12 @@ wss.on('connection', (ws) => {
       if (store.users[username]) {
         return ws.send(JSON.stringify({ type: 'regError', message: 'Пользователь уже существует' }));
       }
-      store.users[username] = { password, token: null };
+      // Создаём пользователя и сразу выдаём токен (автовход)
+      const token = genToken();
+      store.users[username] = { password, token };
+      clients.set(ws, { username, token });
       saveData();
-      ws.send(JSON.stringify({ type: 'regSuccess' }));
+      ws.send(JSON.stringify({ type: 'authSuccess', username, token }));
     }
 
     // ==== Авторизация ====
@@ -140,10 +143,9 @@ wss.on('connection', (ws) => {
       const client = clients.get(ws);
       const isAuth = client && client.username && store.users[client.username]?.token === client.token;
       const authorName = isAuth ? client.username : (msg.name?.trim() || 'Аноним');
-
       const title = msg.title?.trim() || 'Без названия';
       const text = msg.text?.trim() || '';
-      const image = msg.image || null; // имя файла уже должно быть обработано
+      const image = msg.image || null;
 
       const thread = {
         id: store.nextThreadId++,
@@ -207,7 +209,7 @@ wss.on('connection', (ws) => {
       ws.send(JSON.stringify({ type: 'postCreated', success: true, postId: post.id }));
     }
 
-    // ==== Запрос списка тредов ====
+    // ==== Запросы данных ====
     else if (msg.type === 'getThreads') {
       ws.send(JSON.stringify({
         type: 'threadsList',
@@ -223,16 +225,10 @@ wss.on('connection', (ws) => {
         }))
       }));
     }
-
-    // ==== Запрос одного треда ====
     else if (msg.type === 'getThread') {
       const thread = getThreadById(msg.threadId);
-      if (thread) {
-        ws.send(JSON.stringify({ type: 'threadDetail', thread }));
-      }
+      if (thread) ws.send(JSON.stringify({ type: 'threadDetail', thread }));
     }
-
-    // ==== Профиль пользователя ====
     else if (msg.type === 'getProfile') {
       const username = msg.username;
       const threads = store.threads.filter(t => t.author === username || t.posts.some(p => p.author === username));
@@ -270,20 +266,10 @@ const server = http.createServer((req, res) => {
     if (pathname.startsWith('/uploads/')) {
       return serveUpload(pathname, res);
     }
-    if (pathname.startsWith('/api/profile/')) {
-      const username = pathname.split('/api/profile/')[1];
-      const userExists = !!store.users[username];
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ exists: userExists }));
-      return;
-    }
   }
 
-  // API загрузки файлов (для треда и поста)
-  if (method === 'POST') {
-    if (pathname === '/api/upload') {
-      return handleFileUpload(req, res);
-    }
+  if (method === 'POST' && pathname === '/api/upload') {
+    return handleFileUpload(req, res);
   }
 
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -344,10 +330,9 @@ function getIndexHTML() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TKK Forum – Авторизация и профиль</title>
+<title>TKK Forum – Надёжная авторизация</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-/* Стили (сокращены для краткости, но полностью рабочие) */
 :root {
   --bg: #0a0a14;
   --card-bg: #12122a;
@@ -388,6 +373,11 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 }
 .header p { color: var(--text-dim); font-size: 0.9rem; margin-top: 8px; }
 .auth-area { position: absolute; right: 20px; top: 20px; display: flex; gap: 10px; align-items: center; }
+.connection-status {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: red;
+  margin-right: 5px;
+}
+.connection-status.online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
 .neon-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 8px 18px; background: transparent; border: 2px solid var(--neon-cyan);
@@ -450,19 +440,20 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 
 <div class="header">
   <h1>TKK Forum</h1>
-  <p>Анонимный неоновый имиджборд с профилями</p>
+  <p>Неоновый имиджборд с профилями и надёжной авторизацией</p>
   <div class="auth-area" id="auth-area">
+    <span id="conn-status" class="connection-status" title="Подключение к серверу"></span>
     <button class="neon-btn" id="show-login-btn">Вход</button>
     <button class="neon-btn magenta" id="show-register-btn">Регистрация</button>
   </div>
   <div class="auth-area" id="user-area" style="display:none">
-    <span id="username-display"></span>
+    <span id="username-display" style="margin-right:10px;"></span>
     <button class="neon-btn magenta" id="profile-btn">Профиль</button>
     <button class="neon-btn" id="logout-btn">Выйти</button>
   </div>
 </div>
 
-<!-- Модалка входа/регистрации -->
+<!-- Модалка авторизации -->
 <div class="modal" id="auth-modal">
   <div class="modal-content">
     <span class="close-modal" id="close-auth-modal">&times;</span>
@@ -485,7 +476,7 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
   </div>
 </div>
 
-<!-- Главная страница -->
+<!-- Основной интерфейс -->
 <div id="main-page">
   <div class="form-card">
     <div class="form-title">Новый тред</div>
@@ -505,13 +496,11 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
   <div class="thread-list" id="thread-list"></div>
 </div>
 
-<!-- Страница треда -->
 <div class="thread-view" id="thread-view">
   <button class="neon-btn back-btn" id="back-from-thread">← Назад</button>
   <div id="thread-detail"></div>
 </div>
 
-<!-- Страница профиля -->
 <div id="profile-page" style="display:none">
   <button class="neon-btn back-btn" id="back-from-profile">← На главную</button>
   <div id="profile-content"></div>
@@ -519,9 +508,109 @@ a:hover { text-shadow: 0 0 8px var(--neon-cyan); }
 
 <script>
 // ================== КЛИЕНТ ==================
-const ws = new WebSocket('ws://' + location.host);
+let ws;
 let currentUser = null;
 let token = null;
+let pendingMessages = []; // очередь сообщений до открытия сокета
+
+// Инициализация WebSocket с обработкой состояния
+function connectWebSocket() {
+  ws = new WebSocket('ws://' + location.host);
+  const connStatus = document.getElementById('conn-status');
+
+  ws.onopen = () => {
+    connStatus.classList.add('online');
+    // Отправляем все накопленные сообщения
+    pendingMessages.forEach(msg => ws.send(msg));
+    pendingMessages = [];
+    // Восстановление сессии
+    const saved = JSON.parse(sessionStorage.getItem('tkkSession'));
+    if (saved) {
+      safeSend({ type: 'restoreSession', username: saved.username, token: saved.token });
+    }
+  };
+
+  ws.onclose = () => {
+    connStatus.classList.remove('online');
+    // Пытаемся переподключиться через 2 секунды
+    setTimeout(connectWebSocket, 2000);
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    handleMessage(msg);
+  };
+
+  ws.onerror = () => {
+    connStatus.classList.remove('online');
+  };
+}
+
+// Безопасная отправка (с очередью)
+function safeSend(obj) {
+  const msg = JSON.stringify(obj);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(msg);
+  } else {
+    pendingMessages.push(msg);
+  }
+}
+
+// Обработка входящих сообщений
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'authSuccess':
+      currentUser = msg.username;
+      token = msg.token;
+      sessionStorage.setItem('tkkSession', JSON.stringify({ username: currentUser, token }));
+      updateAuthUI();
+      document.getElementById('auth-modal').classList.remove('active');
+      loadThreads();
+      break;
+
+    case 'authError':
+      document.getElementById('login-error').textContent = msg.message || 'Ошибка входа';
+      break;
+
+    case 'regError':
+      document.getElementById('reg-error').textContent = msg.message;
+      break;
+
+    case 'regSuccess': // оставлено для совместимости, но не используется
+      break;
+
+    case 'threadsList':
+      renderThreadList(msg.threads);
+      break;
+
+    case 'threadCreated':
+      if (msg.success) {
+        // очистка формы
+        document.getElementById('thread-title').value = '';
+        document.getElementById('thread-name').value = '';
+        document.getElementById('thread-text').value = '';
+        document.getElementById('thread-image').value = '';
+        document.getElementById('thread-image-preview').style.display = 'none';
+        loadThreads();
+      }
+      break;
+
+    case 'threadDetail':
+      renderThread(msg.thread);
+      break;
+
+    case 'postAdded':
+      if (currentThreadId === msg.threadId) {
+        loadThread(msg.threadId);
+      }
+      loadThreads();
+      break;
+
+    case 'profileData':
+      renderProfile(msg.profile);
+      break;
+  }
+}
 
 // DOM элементы
 const authArea = document.getElementById('auth-area');
@@ -554,72 +643,12 @@ const threadImage = document.getElementById('thread-image');
 const threadImagePreview = document.getElementById('thread-image-preview');
 const threadError = document.getElementById('thread-error');
 
-// Проверка сохранённой сессии
-const savedSession = JSON.parse(sessionStorage.getItem('tkkSession'));
-if (savedSession) {
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ type: 'restoreSession', username: savedSession.username, token: savedSession.token }));
-  };
-}
-
-// WebSocket обработчики
-ws.onmessage = (event) => {
-  const msg = JSON.parse(event.data);
-  switch (msg.type) {
-    case 'authSuccess':
-      currentUser = msg.username;
-      token = msg.token;
-      sessionStorage.setItem('tkkSession', JSON.stringify({ username: currentUser, token }));
-      updateAuthUI();
-      authModal.classList.remove('active');
-      loadThreads();
-      break;
-    case 'authError':
-      if (document.getElementById('login-error').style.display !== 'none') loginError.textContent = msg.message;
-      else regError.textContent = msg.message;
-      break;
-    case 'regSuccess':
-      regError.textContent = '';
-      registerForm.style.display = 'none';
-      loginForm.style.display = 'block';
-      tabLogin.classList.add('active');
-      tabRegister.classList.remove('active');
-      alert('Регистрация успешна! Теперь войдите.');
-      break;
-    case 'regError':
-      regError.textContent = msg.message;
-      break;
-    case 'threadsList':
-      renderThreadList(msg.threads);
-      break;
-    case 'threadCreated':
-      if (msg.success) {
-        threadTitle.value = ''; threadName.value = ''; threadText.value = '';
-        threadImage.value = ''; threadImagePreview.style.display = 'none';
-        loadThreads();
-      }
-      break;
-    case 'threadDetail':
-      renderThread(msg.thread);
-      break;
-    case 'postAdded':
-      if (currentThreadId === msg.threadId) {
-        loadThread(msg.threadId);
-      }
-      loadThreads(); // обновить счётчики
-      break;
-    case 'profileData':
-      renderProfile(msg.profile);
-      break;
-  }
-};
-
+// Обновление интерфейса после входа/выхода
 function updateAuthUI() {
   if (currentUser) {
     authArea.style.display = 'none';
     userArea.style.display = 'flex';
     usernameDisplay.textContent = currentUser;
-    // Блокируем поле имени для авторизованных
     threadName.disabled = true;
     threadName.value = currentUser;
   } else {
@@ -630,8 +659,9 @@ function updateAuthUI() {
   }
 }
 
+// Загрузка списка тредов
 function loadThreads() {
-  ws.send(JSON.stringify({ type: 'getThreads' }));
+  safeSend({ type: 'getThreads' });
 }
 
 function renderThreadList(threads) {
@@ -650,6 +680,7 @@ function renderThreadList(threads) {
       </div>
     `;
   }).join('');
+
   document.querySelectorAll('.thread-preview').forEach(el => {
     el.addEventListener('click', () => openThread(parseInt(el.dataset.id)));
   });
@@ -658,13 +689,14 @@ function renderThreadList(threads) {
 let currentThreadId = null;
 function openThread(id) {
   currentThreadId = id;
-  ws.send(JSON.stringify({ type: 'getThread', threadId: id }));
+  safeSend({ type: 'getThread', threadId: id });
 }
 
 function renderThread(thread) {
   mainPage.style.display = 'none';
   profilePage.style.display = 'none';
   threadView.style.display = 'block';
+
   let html = `
     <div class="post">
       <div class="post-header">
@@ -676,6 +708,7 @@ function renderThread(thread) {
       ${thread.image ? `<img src="/uploads/${thread.image}" class="post-image" onclick="openImageModal(this.src)">` : ''}
     </div>
   `;
+
   thread.posts.forEach(post => {
     html += `
       <div class="post">
@@ -689,6 +722,7 @@ function renderThread(thread) {
       </div>
     `;
   });
+
   html += `
     <div class="form-card" style="margin-top:30px">
       <div class="form-title">Ответить</div>
@@ -702,6 +736,7 @@ function renderThread(thread) {
       <div style="color:red; margin-top:10px" id="post-error"></div>
     </div>
   `;
+
   threadDetailDiv.innerHTML = html;
   document.getElementById('send-post-btn').onclick = () => submitPost(thread.id);
   document.getElementById('post-image').onchange = (e) => previewFile(e, 'post-image-preview');
@@ -723,7 +758,7 @@ async function submitPost(threadId) {
     const json = await res.json();
     image = json.image;
   }
-  ws.send(JSON.stringify({ type: 'createPost', threadId, name, text, image, token }));
+  safeSend({ type: 'createPost', threadId, name, text, image, token });
   document.getElementById('post-text').value = '';
   imageInput.value = '';
   document.getElementById('post-image-preview').style.display = 'none';
@@ -746,14 +781,13 @@ createThreadBtn.onclick = async () => {
     const json = await res.json();
     image = json.image;
   }
-  ws.send(JSON.stringify({ type: 'createThread', title, name, text, image, token }));
+  safeSend({ type: 'createThread', title, name, text, image, token });
+  threadError.textContent = '';
 };
 
 // Профиль
 profileBtn.onclick = () => {
-  if (currentUser) {
-    ws.send(JSON.stringify({ type: 'getProfile', username: currentUser }));
-  }
+  if (currentUser) safeSend({ type: 'getProfile', username: currentUser });
 };
 function renderProfile(profile) {
   mainPage.style.display = 'none';
@@ -778,7 +812,7 @@ backFromProfile.onclick = () => {
   mainPage.style.display = 'block';
 };
 
-// Авторизация/регистрация UI
+// Модальное окно авторизации
 document.getElementById('show-login-btn').onclick = () => {
   authModal.classList.add('active');
   tabLogin.click();
@@ -788,6 +822,7 @@ document.getElementById('show-register-btn').onclick = () => {
   tabRegister.click();
 };
 closeAuthModal.onclick = () => authModal.classList.remove('active');
+
 tabLogin.onclick = () => {
   tabLogin.classList.add('active');
   tabRegister.classList.remove('active');
@@ -800,27 +835,40 @@ tabRegister.onclick = () => {
   registerForm.style.display = 'block';
   loginForm.style.display = 'none';
 };
+
+// Отправка форм входа/регистрации
 loginSubmit.onclick = () => {
   const u = document.getElementById('login-username').value.trim();
   const p = document.getElementById('login-password').value.trim();
-  if (!u || !p) { loginError.textContent = 'Заполните поля'; return; }
-  ws.send(JSON.stringify({ type: 'login', username: u, password: p }));
+  if (!u || !p) {
+    loginError.textContent = 'Заполните поля';
+    return;
+  }
+  safeSend({ type: 'login', username: u, password: p });
+  loginError.textContent = '';
 };
+
 registerSubmit.onclick = () => {
   const u = document.getElementById('reg-username').value.trim();
   const p = document.getElementById('reg-password').value.trim();
-  if (!u || !p) { regError.textContent = 'Заполните поля'; return; }
-  ws.send(JSON.stringify({ type: 'register', username: u, password: p }));
+  if (!u || !p) {
+    regError.textContent = 'Заполните поля';
+    return;
+  }
+  safeSend({ type: 'register', username: u, password: p });
+  regError.textContent = '';
 };
+
 logoutBtn.onclick = () => {
-  currentUser = null; token = null;
+  currentUser = null;
+  token = null;
   sessionStorage.removeItem('tkkSession');
   updateAuthUI();
   loadThreads();
 };
 
 // Утилиты
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function previewFile(input, previewId) {
   const file = input.target.files[0];
   const preview = document.getElementById(previewId);
@@ -828,11 +876,17 @@ function previewFile(input, previewId) {
     const reader = new FileReader();
     reader.onload = (e) => { preview.src = e.target.result; preview.style.display = 'block'; };
     reader.readAsDataURL(file);
-  } else preview.style.display = 'none';
+  } else {
+    preview.style.display = 'none';
+  }
 }
+
+// Превью для формы треда
 threadImage.onchange = (e) => previewFile(e, 'thread-image-preview');
+
+// Старт
+connectWebSocket();
 updateAuthUI();
-loadThreads();
 </script>
 </body>
 </html>`;

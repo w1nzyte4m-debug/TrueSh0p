@@ -1,387 +1,184 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const session = require('express-session');
-const path = require('path');
+/* ---------- ОРУЖИЕ ---------- */
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const weapons = {
+    rifle: {
+        name: "Rifle",
+        damage: 25,
+        ammo: 30,
+        maxAmmo: 30,
+        fireRate: 120
+    },
 
-const PORT = process.env.PORT || 3000;
-
-const users = {};
-const threads = [];
-let onlineCount = 0;
-
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-app.use(session({
-    secret: 'tkk_secret_key_meow',
-    resave: false,
-    saveUninitialized: true
-}));
-
-app.get('/', (req, res) => {
-    if (!req.session.user) {
-        return res.redirect('/login');
+    pistol: {
+        name: "Pistol",
+        damage: 15,
+        ammo: 15,
+        maxAmmo: 15,
+        fireRate: 300
     }
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
+};
 
-app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
+let currentWeapon = "rifle";
+let lastShot = 0;
 
-// Перенаправление, если кто-то попытается зайти на /register обычным путем
-app.get('/register', (req, res) => res.redirect('/login'));
+/* ---------- HUD ---------- */
 
-app.post('/register', (req, res) => {
-    const { username, password } = req.body;
-    if (users[username]) {
-        return res.send('<h3 style="color:white; text-align:center; font-family:sans-serif;">Пользователь уже существует! <a href="/login" style="color:#bb86fc;">Назад</a></h3>');
-    }
-    users[username] = password;
-    req.session.user = username;
-    res.redirect('/');
-});
+const hud = document.createElement("div");
 
-app.post('/login', (req, res) => {
-    const { username, password } = req.body;
-    if (users[username] && users[username] === password) {
-        req.session.user = username;
-        return res.redirect('/');
-    }
-    res.send('<h3 style="color:white; text-align:center; font-family:sans-serif;">Неверный логин или пароль! <a href="/login" style="color:#bb86fc;">Назад</a></h3>');
-});
+hud.style.position = "absolute";
+hud.style.left = "10px";
+hud.style.bottom = "10px";
+hud.style.color = "white";
+hud.style.fontFamily = "Arial";
+hud.style.fontSize = "20px";
 
-app.get('/logout', (req, res) => {
-    req.session.destroy();
-    res.redirect('/login');
-});
+document.body.appendChild(hud);
 
-app.get('/api/info', (req, res) => {
-    res.json({ currentUser: req.session.user, threads });
-});
+function updateHUD() {
+    const w = weapons[currentWeapon];
 
-app.post('/api/threads', (req, res) => {
-    if (!req.session.user) return res.status(403).send('Не авторизован');
-    const { title, content, type } = req.body;
-    const newThread = {
-        id: threads.length + 1,
-        author: req.session.user,
-        title,
-        content,
-        type,
-        replies: []
+    hud.innerHTML =
+        `${w.name}<br>` +
+        `Ammo: ${w.ammo}/${w.maxAmmo}`;
+}
+
+/* ---------- NPC ---------- */
+
+const npcs = [];
+
+function createNPC(x, z) {
+
+    const npc = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 2, 1),
+        new THREE.MeshStandardMaterial({
+            color: 0xff4444
+        })
+    );
+
+    npc.position.set(x, 1, z);
+
+    npc.userData = {
+        hp: 100
     };
-    threads.push(newThread);
-    io.emit('update_forum');
-    res.redirect('/');
+
+    scene.add(npc);
+
+    npcs.push(npc);
+}
+
+/* ---------- СПАВН NPC ---------- */
+
+for(let i = 0; i < 15; i++) {
+
+    createNPC(
+        (Math.random() - 0.5) * 100,
+        (Math.random() - 0.5) * 100
+    );
+
+}
+
+/* ---------- ВЫБОР ОРУЖИЯ ---------- */
+
+window.addEventListener("keydown", e => {
+
+    if(e.code === "Digit1")
+        currentWeapon = "rifle";
+
+    if(e.code === "Digit2")
+        currentWeapon = "pistol";
+
 });
 
-app.post('/api/threads/:id/reply', (req, res) => {
-    if (!req.session.user) return res.status(403).send('Не авторизован');
-    const threadId = parseInt(req.params.id);
-    const { content } = req.body;
-    const thread = threads.find(t => t.id === threadId);
-    if (thread) {
-        thread.replies.push({
-            author: req.session.user,
-            content
-        });
-        io.emit('update_forum');
+/* ---------- СТРЕЛЬБА ---------- */
+
+const raycaster = new THREE.Raycaster();
+
+window.addEventListener("mousedown", () => {
+
+    const weapon = weapons[currentWeapon];
+
+    if(Date.now() - lastShot < weapon.fireRate)
+        return;
+
+    if(weapon.ammo <= 0)
+        return;
+
+    lastShot = Date.now();
+    weapon.ammo--;
+
+    raycaster.setFromCamera(
+        new THREE.Vector2(0,0),
+        camera
+    );
+
+    const hits = raycaster.intersectObjects(npcs);
+
+    if(hits.length > 0) {
+
+        const npc = hits[0].object;
+
+        npc.userData.hp -= weapon.damage;
+
+        if(npc.userData.hp <= 0) {
+
+            scene.remove(npc);
+
+            const index =
+                npcs.indexOf(npc);
+
+            if(index !== -1)
+                npcs.splice(index,1);
+        }
     }
-    res.redirect('/');
+
+    updateHUD();
+
 });
 
-io.on('connection', (socket) => {
-    onlineCount++;
-    io.emit('online_change', onlineCount);
+/* ---------- ПЕРЕЗАРЯДКА ---------- */
 
-    socket.on('disconnect', () => {
-        onlineCount--;
-        io.emit('online_change', onlineCount);
+window.addEventListener("keydown", e => {
+
+    if(e.code === "KeyR") {
+
+        const w = weapons[currentWeapon];
+
+        w.ammo = w.maxAmmo;
+
+        updateHUD();
+    }
+
+});
+
+/* ---------- ПРОСТОЙ ИИ ---------- */
+
+function updateNPCs() {
+
+    npcs.forEach(npc => {
+
+        const dir = new THREE.Vector3(
+            camera.position.x - npc.position.x,
+            0,
+            camera.position.z - npc.position.z
+        );
+
+        const dist = dir.length();
+
+        if(dist < 30) {
+
+            dir.normalize();
+
+            npc.position.x += dir.x * 0.02;
+            npc.position.z += dir.z * 0.02;
+        }
+
     });
-});
 
-server.listen(PORT, () => {
-    console.log(`[ТКК ФОРУМ] Успешно запущен на http://localhost:${PORT}`);
-});
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ТКК Форум - Вход</title>
-    <style>
-        :root {
-            --bg-main: #0d1117;
-            --bg-card: #161b22;
-            --border-color: #30363d;
-            --text-main: #c9d1d9;
-            --accent: #8a2be2;
-            --accent-hover: #9b4dca;
-        }
-        body {
-            background-color: var(--bg-main);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .auth-container {
-            background: var(--bg-card);
-            padding: 40px;
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-            width: 100%;
-            max-width: 320px;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-        .logo {
-            font-size: 28px;
-            font-weight: bold;
-            color: #fff;
-            margin-bottom: 5px;
-        }
-        .logo span { color: var(--accent); }
-        h2 { color: var(--text-main); font-size: 18px; font-weight: normal; margin-bottom: 25px; }
-        
-        input {
-            width: 100%;
-            box-sizing: border-box;
-            padding: 12px 15px;
-            margin: 10px 0;
-            background: var(--bg-main);
-            border: 1px solid var(--border-color);
-            color: #fff;
-            border-radius: 6px;
-            font-size: 14px;
-            transition: border 0.2s;
-            outline: none;
-        }
-        input:focus { border-color: var(--accent); }
-        
-        button {
-            width: 100%;
-            padding: 12px;
-            margin-top: 15px;
-            background: var(--accent);
-            border: none;
-            color: #fff;
-            font-weight: 600;
-            font-size: 15px;
-            cursor: pointer;
-            border-radius: 6px;
-            transition: background 0.2s, transform 0.1s;
-        }
-        button:hover { background: var(--accent-hover); }
-        button:active { transform: scale(0.98); }
-        
-        .toggle-form {
-            margin-top: 25px;
-            font-size: 13px;
-            color: #8b949e;
-            cursor: pointer;
-            transition: color 0.2s;
-        }
-        .toggle-form:hover { color: var(--accent); text-decoration: underline; }
-    </style>
-</head>
-<body>
-    <div class="auth-container">
-        <div class="logo">ТКК <span>Форум</span></div>
-        <h2 id="form-title">Вход в систему</h2>
-        <form id="auth-form" action="/login" method="POST">
-            <input type="text" name="username" placeholder="Имя пользователя" required autocomplete="off">
-            <input type="password" name="password" placeholder="Пароль" required>
-            <button type="submit" id="submit-btn">Войти</button>
-        </form>
-        <div class="toggle-form" id="toggle-link" onclick="toggleAuth()">Ещё нет аккаунта? Создать</div>
-    </div>
+}
 
-    <script>
-        let isLogin = true;
-        function toggleAuth() {
-            isLogin = !isLogin;
-            document.getElementById('form-title').innerText = isLogin ? 'Вход в систему' : 'Регистрация нового аккаунта';
-            document.getElementById('auth-form').action = isLogin ? '/login' : '/register';
-            document.getElementById('submit-btn').innerText = isLogin ? 'Войти' : 'Зарегистрироваться';
-            document.getElementById('toggle-link').innerText = isLogin ? 'Ещё нет аккаунта? Создать' : 'Уже есть аккаунт? Войти';
-        }
-    </script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ТКК Форум</title>
-    <script src="/socket.io/socket.io.js"></script>
-    <style>
-        :root {
-            --bg-main: #0d1117;
-            --bg-card: #161b22;
-            --border-color: #30363d;
-            --text-main: #c9d1d9;
-            --text-muted: #8b949e;
-            --accent: #8a2be2;
-            --guide-badge: #238636;
-            --thread-badge: #1f6feb;
-        }
-        body { background-color: var(--bg-main); color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; }
-        
-        /* Шапка */
-        header { background-color: var(--bg-card); border-bottom: 1px solid var(--border-color); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
-        .logo { font-size: 22px; font-weight: bold; color: #fff; }
-        .logo span { color: var(--accent); }
-        .header-right { display: flex; align-items: center; gap: 20px; }
-        .stats { background: rgba(138, 43, 226, 0.1); padding: 6px 12px; border-radius: 20px; border: 1px solid var(--accent); font-size: 14px; color: #e5c3ff; font-weight: 500; }
-        .online-dot { display: inline-block; width: 8px; height: 8px; background: #3fb950; border-radius: 50%; margin-right: 5px; box-shadow: 0 0 8px #3fb950; }
-        .logout-btn { color: #f85149; text-decoration: none; font-size: 14px; font-weight: 600; transition: color 0.2s; }
-        .logout-btn:hover { color: #ff7b72; text-decoration: underline; }
+/* ---------- В ОСНОВНОЙ ЦИКЛ ---------- */
 
-        /* Сетка */
-        .container { display: grid; grid-template-columns: 320px 1fr; gap: 25px; padding: 30px; max-width: 1200px; margin: 0 auto; }
-        
-        /* Форма создания */
-        .form-section { background: var(--bg-card); padding: 25px; border-radius: 12px; border: 1px solid var(--border-color); height: fit-content; position: sticky; top: 90px; }
-        .form-section h3 { margin-top: 0; margin-bottom: 20px; color: #fff; font-size: 18px; }
-        label { display: block; margin-bottom: 8px; font-size: 13px; color: var(--text-muted); }
-        input, textarea, select { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 15px; background: var(--bg-main); border: 1px solid var(--border-color); color: #fff; border-radius: 6px; font-family: inherit; outline: none; }
-        input:focus, textarea:focus, select:focus { border-color: var(--accent); }
-        button { width: 100%; background: var(--accent); color: #fff; border: none; padding: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; transition: 0.2s; }
-        button:hover { background: #9b4dca; }
-        
-        /* Лента постов */
-        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; margin-bottom: 20px; transition: border-color 0.2s; }
-        .card:hover { border-color: #484f58; }
-        .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-        .badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; }
-        .badge-thread { background: rgba(31, 111, 235, 0.15); color: var(--thread-badge); border: 1px solid rgba(31, 111, 235, 0.3); }
-        .badge-guide { background: rgba(35, 134, 54, 0.15); color: var(--guide-badge); border: 1px solid rgba(35, 134, 54, 0.3); }
-        .author { color: var(--text-muted); font-size: 13px; }
-        .card-title { margin: 5px 0 15px 0; color: #fff; font-size: 20px; }
-        .card-content { font-size: 15px; line-height: 1.6; white-space: pre-wrap; margin-bottom: 20px; }
-        
-        /* Комментарии */
-        .replies-box { background: var(--bg-main); border-radius: 8px; padding: 15px; border: 1px solid var(--border-color); }
-        .replies-title { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-top: 0; margin-bottom: 15px; text-transform: uppercase; }
-        .reply { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); }
-        .reply:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-        .reply-author { color: #fff; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
-        .reply-text { font-size: 14px; line-height: 1.4; color: var(--text-main); }
-        
-        .reply-form { display: flex; gap: 10px; margin-top: 15px; }
-        .reply-form input { margin-bottom: 0; flex-grow: 1; }
-        .reply-form button { width: auto; padding: 10px 20px; }
-    </style>
-</head>
-<body>
+// добавить внутрь animate():
 
-    <header>
-        <div class="logo">ТКК <span>Форум</span></div>
-        <div class="header-right">
-            <div style="font-size: 14px;">Привет, <strong id="username-display" style="color:var(--accent);">...</strong></div>
-            <div class="stats"><span class="online-dot"></span>Онлайн: <span id="online-counter">0</span></div>
-            <a href="/logout" class="logout-btn">Выйти</a>
-        </div>
-    </header>
-
-    <div class="container">
-        <div class="form-section">
-            <h3>Создать публикацию</h3>
-            <form action="/api/threads" method="POST">
-                <label>Тип публикации</label>
-                <select name="type">
-                    <option value="thread">Тред (Обсуждение)</option>
-                    <option value="guide">Гайд (Обучение)</option>
-                </select>
-                
-                <label>Заголовок</label>
-                <input type="text" name="title" placeholder="О чем хотите рассказать?" required autocomplete="off">
-                
-                <label>Содержание</label>
-                <textarea name="content" rows="6" placeholder="Текст вашей публикации..." required></textarea>
-                
-                <button type="submit">Опубликовать</button>
-            </form>
-        </div>
-
-        <div class="content-section" id="forum-feed">
-            </div>
-    </div>
-
-    <script>
-        const socket = io();
-
-        socket.on('online_change', (count) => {
-            document.getElementById('online-counter').innerText = count;
-        });
-
-        socket.on('update_forum', loadForumData);
-
-        async function loadForumData() {
-            const response = await fetch('/api/info');
-            const data = await response.json();
-            
-            document.getElementById('username-display').innerText = data.currentUser;
-            
-            const feed = document.getElementById('forum-feed');
-            feed.innerHTML = ''; 
-
-            if(data.threads.length === 0) {
-                feed.innerHTML = `
-                    <div style="text-align: center; padding: 50px; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 12px;">
-                        Здесь пока пусто. Будь первым, кто создаст тред!
-                    </div>`;
-                return;
-            }
-
-            data.threads.slice().reverse().forEach(thread => {
-                const card = document.createElement('div');
-                card.className = 'card';
-                
-                const badgeClass = thread.type === 'guide' ? 'badge-guide' : 'badge-thread';
-                const badgeText = thread.type === 'guide' ? 'Гайд' : 'Тред';
-
-                let repliesHTML = '';
-                thread.replies.forEach(r => {
-                    repliesHTML += `
-                        <div class="reply">
-                            <div class="reply-author">${r.author}</div>
-                            <div class="reply-text">${r.content}</div>
-                        </div>`;
-                });
-
-                card.innerHTML = `
-                    <div class="card-header">
-                        <span class="badge ${badgeClass}">${badgeText}</span>
-                        <span class="author">Опубликовал(а) <b>${thread.author}</b></span>
-                    </div>
-                    <h2 class="card-title">${thread.title}</h2>
-                    <div class="card-content">${thread.content}</div>
-                    
-                    <div class="replies-box">
-                        <div class="replies-title">Комментарии (${thread.replies.length})</div>
-                        ${repliesHTML || '<div style="color: var(--text-muted); font-size: 13px;">Пока нет ответов...</div>'}
-                        
-                        <form class="reply-form" action="/api/threads/${thread.id}/reply" method="POST">
-                            <input type="text" name="content" placeholder="Написать комментарий..." required autocomplete="off">
-                            <button type="submit">Отправить</button>
-                        </form>
-                    </div>
-                `;
-                feed.appendChild(card);
-            });
-        }
-
-        loadForumData();
-    </script>
-</body>
-</html>
+updateNPCs();
+updateHUD();
